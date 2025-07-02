@@ -47,7 +47,6 @@ mod tests {
 
         let now = Instant::now();
         let decoded = loop {
-            println!("Rank: {}", decoder.rank());
             if let Some(decoded) = decoder.decode(coded_packets.pop().unwrap()).unwrap() {
                 break decoded;
             }
