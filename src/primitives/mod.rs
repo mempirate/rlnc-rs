@@ -1,2 +1,2 @@
-pub mod galois;
-pub mod packet;
+pub(crate) mod galois;
+pub(crate) mod packet;

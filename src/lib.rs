@@ -6,7 +6,6 @@
 mod common;
 pub mod decode;
 pub mod encode;
-mod matrix;
 mod primitives;
 
 #[cfg(test)]
