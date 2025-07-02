@@ -12,8 +12,9 @@ use crate::{
 pub struct Decoder {
     /// The size of each original chunk in bytes.
     chunk_size: usize,
-    /// The number of coded packets required to decode the original data.
-    generation_size: usize,
+    /// The number of coded packets required to decode the original data, also known as the
+    /// generation size.
+    chunk_count: usize,
 
     // Stateful data:
     /// The received coded packets.
@@ -25,21 +26,21 @@ pub struct Decoder {
 }
 
 impl Decoder {
-    /// Creates a new decoder for the given chunk size and generation size.
-    pub fn new(chunk_size: usize, generation_size: usize) -> Result<Self, RLNCError> {
+    /// Creates a new decoder for the given chunk size and chunk count (generation size).
+    pub fn new(chunk_size: usize, chunk_count: usize) -> Result<Self, RLNCError> {
         if chunk_size == 0 {
             return Err(RLNCError::ZeroChunkCount);
         }
 
-        if generation_size == 0 {
+        if chunk_count == 0 {
             return Err(RLNCError::ZeroPacketCount);
         }
 
         Ok(Self {
             chunk_size,
-            generation_size,
-            data: Vec::with_capacity(generation_size),
-            pivot_rows: Vec::with_capacity(generation_size),
+            chunk_count,
+            data: Vec::with_capacity(chunk_count),
+            pivot_rows: vec![None; chunk_count],
             rank: 0,
         })
     }
@@ -47,7 +48,7 @@ impl Decoder {
     /// Decodes a coded packet. If the decoder has enough linearly independent packets, it will
     /// return the original data.
     pub fn decode(&mut self, mut packet: RLNCPacket) -> Result<Option<Bytes>, RLNCError> {
-        if packet.coding_vector.len() != self.generation_size {
+        if packet.coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength);
         }
 
@@ -58,7 +59,7 @@ impl Decoder {
                 // Normalize the row so the leading coefficient is 1
                 let leading_coeff = packet.coding_vector[col];
                 if let Some(inv_coeff) = leading_coeff.inv() {
-                    for i in 0..self.generation_size {
+                    for i in 0..self.chunk_count {
                         packet.coding_vector[i] = packet.coding_vector[i] * inv_coeff;
                     }
 
@@ -75,7 +76,7 @@ impl Decoder {
             }
         }
 
-        if self.rank >= self.generation_size {
+        if self.rank >= self.chunk_count {
             return self.decode_final();
         }
 
@@ -84,7 +85,7 @@ impl Decoder {
     }
 
     fn decode_final(&self) -> Result<Option<Bytes>, RLNCError> {
-        let mut chunks = vec![vec![0u8; self.chunk_size]; self.generation_size];
+        let mut chunks = vec![vec![0u8; self.chunk_size]; self.chunk_count];
 
         // Extract each chunk from the pivot rows (they're already normalized)
         for (col, row_idx) in self
@@ -92,7 +93,7 @@ impl Decoder {
             .iter()
             .enumerate()
             .filter_map(|(i, &r)| r.map(|r| (i, r)))
-            .take(self.generation_size)
+            .take(self.chunk_count)
         {
             let row = &self.data[row_idx];
             for i in 0..self.chunk_size {
@@ -101,7 +102,7 @@ impl Decoder {
         }
 
         // Reconstruct the original data by concatenating chunks
-        let mut decoded = BytesMut::with_capacity(self.chunk_size * self.generation_size);
+        let mut decoded = BytesMut::with_capacity(self.chunk_size * self.chunk_count);
         for chunk in chunks {
             decoded.extend_from_slice(&chunk);
         }
@@ -124,7 +125,7 @@ impl Decoder {
             .iter()
             .enumerate()
             .filter_map(|(i, &r)| r.map(|r| (i, r)))
-            .take(self.generation_size)
+            .take(self.chunk_count)
         {
             let coeff = packet.coding_vector[col];
 
@@ -140,7 +141,7 @@ impl Decoder {
     }
 
     fn subtract_row(&self, dst: &mut RLNCPacket, src: &RLNCPacket, factor: GF256) {
-        for i in 0..self.generation_size {
+        for i in 0..self.chunk_count {
             dst.coding_vector[i] -= factor * src.coding_vector[i];
         }
 
@@ -164,7 +165,7 @@ impl Decoder {
                 let factor = coeff;
 
                 // Perform the subtraction operation manually to avoid borrowing conflicts
-                for j in 0..self.generation_size {
+                for j in 0..self.chunk_count {
                     self.data[i].coding_vector[j] -= factor * new_row.coding_vector[j];
                 }
 
