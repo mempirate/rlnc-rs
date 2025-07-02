@@ -1,5 +1,5 @@
 //! Module that implements the Galois field GF(2^8) primitive and operations.
-use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
 
 use rand::{
     Rng,
@@ -126,6 +126,14 @@ impl Sub for GF256 {
     /// Performs subtraction (XOR) of two GF256 elements.
     fn sub(self, rhs: Self) -> Self::Output {
         Self { p: self.p ^ rhs.p }
+    }
+}
+
+impl SubAssign for GF256 {
+    /// Performs in-place subtraction i.e. compound subtraction operation (XOR) of two GF256
+    /// elements.
+    fn sub_assign(&mut self, rhs: Self) {
+        self.p ^= rhs.p;
     }
 }
 

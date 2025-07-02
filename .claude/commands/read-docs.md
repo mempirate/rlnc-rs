@@ -1,14 +1,9 @@
 ---
-allowed-tools: Bash(cargo:*), Bash(ls:*)
-description: Read the documentation for the given crate. Optionally compile the docs first.
+allowed-tools: Bash(.claude/scripts/gen-docs.sh:*)
+description: Read the documentation for the given crate.
 ---
 
-## Prerequisites
-
-- Crate: $ARGUMENTS
-- Check if the docs are compiled: !`ls target/doc/crate`
-- If not, compile the docs: !`cargo doc --workspace --all-features`
-- Check all documentation files in the crate docs: !`ls target/doc/crate`
-
 ## Task
-Once the docs are compiled, read the documentation for the given crate (in target/doc/$ARGUMENTS). Give the user a one-line summary of the documentation to show that you've read it.
+- Compile the documentation with `.claude/scripts/gen-docs.sh $@`
+- Read the Markdown documentation that was generated
+- Provide a one-line summary of the documentation to show that you've read it.

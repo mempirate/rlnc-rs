@@ -85,18 +85,19 @@ impl Encoder {
         let mut result = vec![GF256::zero(); self.chunk_size];
 
         // TODO: Optimize this. SIMD? Parallel?
-        // First stage: divide the data into chunks.
-        for (chunk, &symbol) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
-            if symbol == GF256::zero() {
+        // First stage: divide the data into chunks
+        for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
+            if coefficient == GF256::zero() {
+                // Result is zero, skip.
                 continue;
             }
 
-            // Second stage: decompose chunks into bytes (GF256 -> u8), and multiply by the symbol
-            // (random coefficient).
+            // Second stage: decompose chunks into symbols (GF256 -> u8), and multiply by the
+            // coefficient.
             //
             // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod GF(256))
             for (i, &byte) in chunk.iter().enumerate() {
-                result[i] += GF256::from(byte) * symbol;
+                result[i] += GF256::from(byte) * coefficient;
             }
         }
 
@@ -109,6 +110,11 @@ impl Encoder {
             self.rng.clone().random_iter().take(self.chunk_count).collect::<Vec<_>>();
 
         self.encode_with_vector(&coding_vector)
+    }
+
+    /// Returns the chunk size used by this encoder.
+    pub fn chunk_size(&self) -> usize {
+        self.chunk_size
     }
 }
 
