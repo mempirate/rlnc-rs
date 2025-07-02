@@ -11,16 +11,6 @@ pub struct RLNCPacket {
 }
 
 impl RLNCPacket {
-    /// Converts the coded packet into a row of the matrix.
-    ///
-    /// The row is a vector of GF256 values: `[coefficients | data]`.
-    pub fn into_row(self) -> Vec<GF256> {
-        let mut row = Vec::with_capacity(self.coding_vector.len() + self.data.len());
-        row.extend(self.coding_vector);
-        row.extend(self.data);
-        row
-    }
-
     pub fn degree(&self) -> usize {
         self.coding_vector.iter().filter(|&c| !c.is_zero()).count()
     }
