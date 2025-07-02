@@ -20,4 +20,12 @@ impl RLNCPacket {
         row.extend(self.data);
         row
     }
+
+    pub fn degree(&self) -> usize {
+        self.coding_vector.iter().filter(|&c| !c.is_zero()).count()
+    }
+
+    pub fn leading_coefficient(&self) -> Option<(usize, GF256)> {
+        self.coding_vector.iter().enumerate().find(|(_, c)| !c.is_zero()).map(|(i, c)| (i, *c))
+    }
 }

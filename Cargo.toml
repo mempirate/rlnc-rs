@@ -9,6 +9,7 @@ resolver = "2"
 rand = "0.9.1"
 bytes = "1.10"
 thiserror = "2.0.12"
+indexmap = "2.6"
 
 [dev-dependencies]
 proptest = "1.7"

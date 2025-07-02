@@ -105,9 +105,11 @@ impl Encoder {
     }
 
     /// Encodes the data with a random coding vector.
-    pub fn encode(&self) -> Result<RLNCPacket, RLNCError> {
-        let coding_vector =
-            self.rng.clone().random_iter().take(self.chunk_count).collect::<Vec<_>>();
+    pub fn encode(&mut self) -> Result<RLNCPacket, RLNCError> {
+        let mut coding_vector = Vec::with_capacity(self.chunk_count);
+        for _ in 0..self.chunk_count {
+            coding_vector.push(self.rng.random::<GF256>());
+        }
 
         self.encode_with_vector(&coding_vector)
     }
@@ -127,7 +129,7 @@ mod tests {
         let data = b"Hello, world!";
         let chunk_count = 3;
 
-        let encoder = Encoder::new(data, chunk_count).unwrap();
+        let mut encoder = Encoder::new(data, chunk_count).unwrap();
         println!("{:?}", encoder);
 
         let packet = encoder.encode().unwrap();

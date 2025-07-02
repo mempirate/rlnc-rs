@@ -25,7 +25,14 @@ mod tests {
 
         let chunk_count = 10;
 
-        let encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
+        println!(
+            "Data size: {} bytes ({}KiB), chunk count: {}",
+            data_size,
+            data_size / 1024,
+            chunk_count
+        );
+
+        let mut encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
 
         let mut coded_packets = Vec::with_capacity(chunk_count);
 
@@ -41,6 +48,7 @@ mod tests {
 
         let now = Instant::now();
         let decoded = loop {
+            println!("Rank: {}", decoder.rank());
             if let Some(decoded) = decoder.decode(coded_packets.pop().unwrap()).unwrap() {
                 break decoded;
             }

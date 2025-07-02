@@ -83,6 +83,11 @@ impl GF256 {
         Self { p: 2 }
     }
 
+    /// Returns true if the element is zero.
+    pub fn is_zero(self) -> bool {
+        self.p == 0
+    }
+
     /// Computes the multiplicative inverse of the element. Returns `None` for the zero element.
     pub fn inv(self) -> Option<Self> {
         if self == Self::zero() {
