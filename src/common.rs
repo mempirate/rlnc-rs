@@ -8,10 +8,12 @@ pub enum RLNCError {
     ZeroChunkCount,
     #[error("Required packet count must be greater than 0")]
     ZeroPacketCount,
-    #[error("Coding vector length must match chunk count")]
-    InvalidCodingVectorLength,
+    #[error("Coding vector length must match chunk count: got {0}, expected {1}")]
+    InvalidCodingVectorLength(usize, usize),
     #[error("Invalid encoding")]
     InvalidEncoding,
 }
 
-pub const BOUNDARY_MARKER: u8 = 0x81;
+/// The boundary marker is a special byte that is used to separate the encoded data from the
+/// padding.
+pub(crate) const BOUNDARY_MARKER: u8 = 0x81;

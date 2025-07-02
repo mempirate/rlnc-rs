@@ -10,13 +10,10 @@ mod primitives;
 
 #[cfg(test)]
 mod tests {
+    use rand::Rng;
     use std::time::Instant;
 
-    use rand::Rng;
-
-    use crate::primitives::galois::GF256;
-
-    use super::{decode::Decoder, encode::Encoder};
+    use super::{decode::Decoder, encode::Encoder, primitives::galois::GF256};
 
     #[test]
     fn test_encode_decode_with_random_vectors() {

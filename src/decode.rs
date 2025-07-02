@@ -49,7 +49,10 @@ impl Decoder {
     /// return the original data.
     pub fn decode(&mut self, mut packet: RLNCPacket) -> Result<Option<Bytes>, RLNCError> {
         if packet.coding_vector.len() != self.chunk_count {
-            return Err(RLNCError::InvalidCodingVectorLength);
+            return Err(RLNCError::InvalidCodingVectorLength(
+                packet.coding_vector.len(),
+                self.chunk_count,
+            ));
         }
 
         self.eliminate_packet(&mut packet);

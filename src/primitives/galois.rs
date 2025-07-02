@@ -62,11 +62,6 @@ pub struct GF256 {
 }
 
 impl GF256 {
-    /// Creates a new GF256 element from a u8 value.
-    const fn new(p: u8) -> Self {
-        Self { p }
-    }
-
     /// Returns the additive identity element (0).
     pub const fn zero() -> Self {
         Self { p: 0 }
@@ -79,6 +74,7 @@ impl GF256 {
 
     /// Returns primitive element x, for GF(2^8) field with irreducible polynomial x^8 + x^4 + x^3 +
     /// x^2 + 1.
+    #[allow(unused)]
     const fn primitive_element() -> Self {
         Self { p: 2 }
     }
@@ -211,7 +207,6 @@ mod tests {
     }
 
     proptest! {
-
         #[test]
         fn test_addition_associativity(a in arb_gf256(), b in arb_gf256(), c in arb_gf256()) {
             prop_assert_eq!((a + b) + c, a + (b + c));

@@ -8,6 +8,7 @@ use crate::{
     primitives::{galois::GF256, packet::RLNCPacket},
 };
 
+/// RLNC Encoder.
 #[derive(Debug, Clone)]
 pub struct Encoder {
     // The original data to be encoded.
@@ -88,7 +89,7 @@ impl Encoder {
     /// ```
     pub fn encode_with_vector(&self, coding_vector: &[GF256]) -> Result<RLNCPacket, RLNCError> {
         if coding_vector.len() != self.chunk_count {
-            return Err(RLNCError::InvalidCodingVectorLength);
+            return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
         }
 
         // The result is a vector of GF256 values, one for each byte in the chunk.

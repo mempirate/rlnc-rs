@@ -1,5 +1,3 @@
-use bytes::Bytes;
-
 use super::galois::GF256;
 
 #[derive(Debug, Clone)]
