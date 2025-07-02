@@ -1,12 +1,14 @@
 //! Module that implements the RLNC decoding algorithm.
 
 use bytes::{Bytes, BytesMut};
-use indexmap::IndexMap;
 
 use crate::{
     common::RLNCError,
     primitives::{galois::GF256, packet::RLNCPacket},
 };
+
+/// Maximum supported generation size for static array allocation
+const MAX_GENERATION_SIZE: usize = 256;
 
 #[derive(Debug, Clone)]
 pub struct Decoder {
@@ -18,8 +20,8 @@ pub struct Decoder {
     // Stateful data:
     /// The received coded packets.
     data: Vec<RLNCPacket>,
-    /// Maps pivot column index to row index. IndexMap maintains insertion order.
-    pivot_rows: IndexMap<usize, usize>,
+    /// Maps pivot column index to row index. Array index is column, value is row index.
+    pivot_rows: [Option<usize>; MAX_GENERATION_SIZE],
     /// The number of linearly independent coded packets received (= rank of the matrix).
     rank: usize,
 }
@@ -34,11 +36,15 @@ impl Decoder {
             return Err(RLNCError::ZeroPacketCount);
         }
 
+        if generation_size > MAX_GENERATION_SIZE {
+            return Err(RLNCError::InvalidCodingVectorLength);
+        }
+
         Ok(Self {
             chunk_size,
             generation_size,
             data: Vec::with_capacity(generation_size),
-            pivot_rows: IndexMap::with_capacity(generation_size),
+            pivot_rows: [None; MAX_GENERATION_SIZE],
             rank: 0,
         })
     }
@@ -53,19 +59,20 @@ impl Decoder {
         self.eliminate_packet(&mut packet);
 
         if let Some((col, _)) = packet.leading_coefficient() {
-            if !self.pivot_rows.contains_key(&col) {
+            if self.pivot_rows[col].is_none() {
                 // Normalize the row so the leading coefficient is 1
                 let leading_coeff = packet.coding_vector[col];
                 if let Some(inv_coeff) = leading_coeff.inv() {
                     for i in 0..self.generation_size {
                         packet.coding_vector[i] = packet.coding_vector[i] * inv_coeff;
                     }
+
                     for i in 0..self.chunk_size {
                         packet.data[i] = packet.data[i] * inv_coeff;
                     }
                 }
-                
-                self.pivot_rows.insert(col, self.data.len());
+
+                self.pivot_rows[col] = Some(self.data.len());
                 self.data.push(packet);
                 self.rank += 1;
 
@@ -85,7 +92,13 @@ impl Decoder {
         let mut chunks = vec![vec![0u8; self.chunk_size]; self.generation_size];
 
         // Extract each chunk from the pivot rows (they're already normalized)
-        for (&col, &row_idx) in &self.pivot_rows {
+        for (col, row_idx) in self
+            .pivot_rows
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &r)| r.map(|r| (i, r)))
+            .take(self.generation_size)
+        {
             let row = &self.data[row_idx];
             for i in 0..self.chunk_size {
                 chunks[col][i] = row.data[i].into();
@@ -100,17 +113,24 @@ impl Decoder {
 
         // Find the LAST boundary marker and truncate (since encoder places it at the end)
         let decoded_bytes = decoded.freeze();
-        if let Some(boundary_pos) = decoded_bytes.iter().rposition(|&b| b == crate::common::BOUNDARY_MARKER) {
-            Ok(Some(decoded_bytes.slice(0..boundary_pos)))
-        } else {
-            // If no boundary marker found, return the full decoded data
-            Ok(Some(decoded_bytes))
-        }
+        let Some(boundary_pos) =
+            decoded_bytes.iter().rposition(|&b| b == crate::common::BOUNDARY_MARKER)
+        else {
+            return Err(RLNCError::InvalidEncoding);
+        };
+
+        Ok(Some(decoded_bytes.slice(0..boundary_pos)))
     }
 
     fn eliminate_packet(&self, packet: &mut RLNCPacket) {
-        // IndexMap maintains insertion order, so pivots are processed in column order
-        for (&col, &row) in &self.pivot_rows {
+        // Process pivots in column order (array index order)
+        for (col, row) in self
+            .pivot_rows
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &r)| r.map(|r| (i, r)))
+            .take(self.generation_size)
+        {
             let coeff = packet.coding_vector[col];
 
             if !coeff.is_zero() {

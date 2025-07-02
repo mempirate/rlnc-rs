@@ -14,6 +14,8 @@ mod tests {
 
     use rand::Rng;
 
+    use crate::primitives::galois::GF256;
+
     use super::{decode::Decoder, encode::Encoder};
 
     #[test]
@@ -31,13 +33,13 @@ mod tests {
             chunk_count
         );
 
-        let mut encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
+        let encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
 
         let mut coded_packets = Vec::with_capacity(chunk_count);
 
         let now = Instant::now();
         for _ in 0..chunk_count {
-            let packet = encoder.encode().unwrap();
+            let packet = encoder.encode(rand::rng()).unwrap();
             coded_packets.push(packet);
         }
 
@@ -51,24 +53,27 @@ mod tests {
                 break decoded;
             }
         };
+
         println!("Decoding time: {:?}", now.elapsed());
 
+        println!("Decoded length: {}", decoded.len());
+        println!("Original length: {}", original_data.len());
         assert!(decoded.starts_with(&original_data));
     }
 
-    // #[test]
-    // fn test_single_byte_data() {
-    //     let original_data = b"A";
-    //     let chunk_count = 1;
+    #[test]
+    fn test_single_byte_data() {
+        let original_data = b"A";
+        let chunk_count = 1;
 
-    //     let encoder = Encoder::new(original_data, chunk_count).unwrap();
-    //     let packet = encoder.encode_with_vector(&[GF256::from(1)]).unwrap();
+        let encoder = Encoder::new(original_data, chunk_count).unwrap();
+        let packet = encoder.encode_with_vector(&[GF256::from(1)]).unwrap();
 
-    //     let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
-    //     let decoded = decoder.decode(packet).unwrap();
+        let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
+        let decoded = decoder.decode(packet).unwrap();
 
-    //     assert!(decoded.is_some());
-    //     let decoded_data = decoded.unwrap();
-    //     assert!(decoded_data.starts_with(original_data));
-    // }
+        assert!(decoded.is_some());
+        let decoded_data = decoded.unwrap();
+        assert!(decoded_data.starts_with(original_data));
+    }
 }

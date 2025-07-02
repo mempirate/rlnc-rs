@@ -1,7 +1,7 @@
 //! Module that implements the RLNC encoding algorithm.
 
-use bytes::{Bytes, BytesMut};
-use rand::{Rng, rngs::ThreadRng};
+use bytes::{BufMut, Bytes, BytesMut};
+use rand::Rng;
 
 use crate::{
     common::{BOUNDARY_MARKER, RLNCError},
@@ -16,8 +16,6 @@ pub struct Encoder {
     chunk_count: usize,
     // The size of each chunk in bytes.
     chunk_size: usize,
-    // The random number generator.
-    rng: ThreadRng,
 }
 
 impl Encoder {
@@ -38,18 +36,26 @@ impl Encoder {
         }
 
         let mut data = BytesMut::from(data.as_ref());
+        data.put_u8(BOUNDARY_MARKER);
 
-        // Add 1 for boundary marker.
-        let chunk_size = (data.len() + 1).div_ceil(chunk_count);
+        // Calculate chunk size to accommodate original data + boundary marker
+        let chunk_size = data.len().div_ceil(chunk_count);
         let padded_len = chunk_size * chunk_count;
 
-        // Pad the data with zeros if it's not a multiple of the chunk size.
+        // Pad the rest with zeros if needed
         data.resize(padded_len, 0);
 
-        // Add boundary marker to the last chunk.
-        data[padded_len - 1] = BOUNDARY_MARKER;
+        Ok(Self { data: data.freeze(), chunk_count, chunk_size })
+    }
 
-        Ok(Self { data: data.freeze(), chunk_count, chunk_size, rng: ThreadRng::default() })
+    /// Returns the number of chunks the data was split into.
+    pub fn chunk_count(&self) -> usize {
+        self.chunk_count
+    }
+
+    /// Returns the size of each chunk in bytes.
+    pub fn chunk_size(&self) -> usize {
+        self.chunk_size
     }
 
     /// Encodes the data with the given coding vector using linear combinations.
@@ -76,6 +82,10 @@ impl Encoder {
     /// ```text
     /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod GF(256))
     /// ```
+    ///
+    /// # Algorithm Complexity
+    /// O(k * n) where k is the chunk count and n is the chunk size.
+    /// ```
     pub fn encode_with_vector(&self, coding_vector: &[GF256]) -> Result<RLNCPacket, RLNCError> {
         if coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength);
@@ -85,6 +95,7 @@ impl Encoder {
         let mut result = vec![GF256::zero(); self.chunk_size];
 
         // TODO: Optimize this. SIMD? Parallel?
+        // https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
         // First stage: divide the data into chunks
         for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
             if coefficient == GF256::zero() {
@@ -104,19 +115,11 @@ impl Encoder {
         Ok(RLNCPacket { coding_vector: coding_vector.to_vec(), data: result })
     }
 
-    /// Encodes the data with a random coding vector.
-    pub fn encode(&mut self) -> Result<RLNCPacket, RLNCError> {
-        let mut coding_vector = Vec::with_capacity(self.chunk_count);
-        for _ in 0..self.chunk_count {
-            coding_vector.push(self.rng.random::<GF256>());
-        }
+    /// Encodes the data with a random coding vector, using the provided random number generator.
+    pub fn encode<R: Rng>(&self, rng: R) -> Result<RLNCPacket, RLNCError> {
+        let coding_vector = rng.random_iter().take(self.chunk_count).collect::<Vec<_>>();
 
         self.encode_with_vector(&coding_vector)
-    }
-
-    /// Returns the chunk size used by this encoder.
-    pub fn chunk_size(&self) -> usize {
-        self.chunk_size
     }
 }
 
@@ -129,10 +132,10 @@ mod tests {
         let data = b"Hello, world!";
         let chunk_count = 3;
 
-        let mut encoder = Encoder::new(data, chunk_count).unwrap();
+        let encoder = Encoder::new(data, chunk_count).unwrap();
         println!("{:?}", encoder);
 
-        let packet = encoder.encode().unwrap();
+        let packet = encoder.encode(rand::rng()).unwrap();
 
         println!("{:?}", packet);
 

@@ -10,6 +10,8 @@ pub enum RLNCError {
     ZeroPacketCount,
     #[error("Coding vector length must match chunk count")]
     InvalidCodingVectorLength,
+    #[error("Invalid encoding")]
+    InvalidEncoding,
 }
 
 pub const BOUNDARY_MARKER: u8 = 0x81;
