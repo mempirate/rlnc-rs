@@ -39,7 +39,7 @@ impl Decoder {
             chunk_size,
             generation_size,
             data: Vec::with_capacity(generation_size),
-            pivot_rows: vec![None; generation_size],
+            pivot_rows: Vec::with_capacity(generation_size),
             rank: 0,
         })
     }
