@@ -7,9 +7,7 @@ use crate::{
     primitives::{galois::GF256, packet::RLNCPacket},
 };
 
-/// Maximum supported generation size for static array allocation
-const MAX_GENERATION_SIZE: usize = 256;
-
+/// RLNC Decoder.
 #[derive(Debug, Clone)]
 pub struct Decoder {
     /// The size of each original chunk in bytes.
@@ -21,12 +19,13 @@ pub struct Decoder {
     /// The received coded packets.
     data: Vec<RLNCPacket>,
     /// Maps pivot column index to row index. Array index is column, value is row index.
-    pivot_rows: [Option<usize>; MAX_GENERATION_SIZE],
+    pivot_rows: Vec<Option<usize>>,
     /// The number of linearly independent coded packets received (= rank of the matrix).
     rank: usize,
 }
 
 impl Decoder {
+    /// Creates a new decoder for the given chunk size and generation size.
     pub fn new(chunk_size: usize, generation_size: usize) -> Result<Self, RLNCError> {
         if chunk_size == 0 {
             return Err(RLNCError::ZeroChunkCount);
@@ -36,15 +35,11 @@ impl Decoder {
             return Err(RLNCError::ZeroPacketCount);
         }
 
-        if generation_size > MAX_GENERATION_SIZE {
-            return Err(RLNCError::InvalidCodingVectorLength);
-        }
-
         Ok(Self {
             chunk_size,
             generation_size,
             data: Vec::with_capacity(generation_size),
-            pivot_rows: [None; MAX_GENERATION_SIZE],
+            pivot_rows: vec![None; generation_size],
             rank: 0,
         })
     }
