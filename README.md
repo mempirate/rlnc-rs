@@ -1,157 +1,132 @@
-# `rslnc`
+# `rlnc-rs`
 
 ## Decoding
 
-#### Standard Gaussian Elimination
+The RLNC decoder implements online Gaussian elimination to reconstruct original data from coded packets as they arrive over the network. Unlike traditional batch processing, packets are processed immediately using an optimized matrix structure.
 
-In typical Gaussian elimination, you have a matrix equation $Ax = b$ and you:
-1. Collect all equations upfront
-2. Form the complete augmented matrix $[A|b]$
-3. Perform forward elimination to get row echelon form
-4. Perform back substitution to solve for $x$
+### Architecture Overview
 
-#### RLNC Challenge: Online Processing
+```mermaid
+graph TD
+    A[Coded Packet Arrives] --> B[Decoder::decode]
+    B --> C[Matrix::push_rref]
+    C --> D[Matrix::eliminate]
+    D --> E{Has Leading Coefficient?}
+    E -->|No| F[Discard Packet]
+    E -->|Yes| G{Pivot Exists?}
+    G -->|Yes| F
+    G -->|No| H[Packet::normalize]
+    H --> I[Store as Pivot]
+    I --> J[Matrix::back_substitute]
+    J --> K[Increment Rank]
+    K --> L{rank >= chunk_count?}
+    L -->|No| M[Continue Processing]
+    L -->|Yes| N[Matrix::decode]
+    N --> O[Extract Chunks]
+    O --> P[Concatenate Data]
+    P --> Q[Find Boundary Marker]
+    Q --> R[Return Original Data]
+```
 
-RLNC decoding has a key difference: packets arrive one by one over the network. You
-can't wait to collect all equations before starting elimination!
+### Key Components
 
-Visual Walkthrough of RLNC Decoding
+**Decoder** (`src/decode.rs`)
+- Main interface for decoding coded packets
+- Manages chunk size and count parameters
+- Delegates matrix operations to internal Matrix
 
-Let's trace through a 3-chunk example:
+**Matrix** (`src/matrix.rs`)
+- Maintains RREF (Reduced Row Echelon Form) matrix
+- Tracks pivot positions using `Vec<Option<usize>>`
+- Performs online Gaussian elimination
 
-Initial State
+**RLNCPacket** (`src/primitives/packet.rs`)
+- Contains coding vector (coefficients) and data payload
+- Supports normalization and row operations in GF(2^8)
+- Provides leading coefficient detection
 
-Decoder state: empty
-pivot_rows: [None, None, None]  // No pivots found yet
-rank: 0
+### Online Processing Algorithm
 
-Packet 1 Arrives: [2, 3, 1] → data1
-
-Step 1: eliminate_packet() - No existing pivots, so packet unchanged
-Step 2: Find leading coefficient at column 0 (value 2)
-Step 3: Normalize row by multiplying by 2⁻¹ in GF(256)
-Step 4: Store as pivot for column 0
-
-Matrix after Packet 1:
-Row 0: [1, 1.5, 0.5] → normalized_data1
-pivot_rows: [Some(0), None, None]
-rank: 1
-
-Packet 2 Arrives: [1, 2, 3] → data2
-
-Step 1: eliminate_packet()
-  - Use existing pivot at column 0 to eliminate coefficient 1
-  - Subtract 1 * Row 0: [1, 2, 3] - 1*[1, 1.5, 0.5] = [0, 0.5, 2.5]
-
-Step 2: Find leading coefficient at column 1 (value 0.5)
-Step 3: Normalize by multiplying by (0.5)⁻¹ = 2
-Step 4: Store as pivot for column 1
-
-Matrix after Packet 2:
-Row 0: [1, 1.5, 0.5] → normalized_data1
-Row 1: [0, 1, 5] → normalized_data2
-pivot_rows: [Some(0), Some(1), None]
-rank: 2
-
-Step 5: back_substitute() - Clean column 1 in previous rows
-Row 0: [1, 1.5, 0.5] - 1.5*[0, 1, 5] = [1, 0, -7]
-
-Packet 3 Arrives: [4, 5, 2] → data3
-
-Step 1: eliminate_packet()
-  - Use pivot at column 0: [4, 5, 2] - 4*[1, 0, -7] = [0, 5, 30]
-  - Use pivot at column 1: [0, 5, 30] - 5*[0, 1, 5] = [0, 0, 5]
-
-Step 2: Find leading coefficient at column 2 (value 5)
-Step 3: Normalize by multiplying by 5⁻¹
-Step 4: Store as pivot for column 2
-
-Final Matrix:
-Row 0: [1, 0, 0] → chunk0_data
-Row 1: [0, 1, 0] → chunk1_data
-Row 2: [0, 0, 1] → chunk2_data
-pivot_rows: [Some(0), Some(1), Some(2)]
-rank: 3 = chunk_count → DECODE COMPLETE!
-
-Key Optimizations in the Implementation
-
-1. Online Elimination (eliminate_packet)
-
-```rs
-fn eliminate_packet(&self, packet: &mut RLNCPacket) {
-    // Process existing pivots in column order
-    for (col, row) in self.pivot_rows.iter().enumerate()
+#### 1. Packet Elimination
+```rust
+fn eliminate(&mut self, packet: &mut RLNCPacket) {
+    // Process pivots in column order
+    for (col, row) in self.pivots.iter().enumerate()
         .filter_map(|(i, &r)| r.map(|r| (i, r))) {
-        // Eliminate coefficient at this column
+        if !packet.coding_vector[col].is_zero() {
+            let factor = packet.coding_vector[col] / pivot_coeff;
+            packet.subtract_row(&pivot_row, factor);
+        }
     }
 }
 ```
 
-Optimization: Eliminate against existing pivots immediately when packet arrives,
-rather than waiting.
+#### 2. Pivot Management
+- `pivots[col] = Some(row_idx)` maps column index to pivot row
+- O(1) lookup for pivot detection and elimination
+- Maintains sparse representation of matrix
 
-2. Efficient Pivot Tracking (pivot_rows)
-
-```rs
-pivot_rows: Vec<Option<usize>>  // pivot_rows[col] = Some(row_idx)
-```
-
-Optimization: Direct O(1) lookup to find which row contains the pivot for each column,
- instead of searching the matrix.
-
-3. Incremental Back-Substitution (back_substitute)
-
-```rs
+#### 3. Incremental Back-Substitution
+```rust
 fn back_substitute(&mut self, new_row_idx: usize) {
-    // Only clean the NEW pivot column in PREVIOUS rows
+    // Clean only the NEW pivot column in PREVIOUS rows
     for i in 0..new_row_idx {
-        // Eliminate new_pivot_col in row i
+        if !self.data[i].coding_vector[new_pivot_col].is_zero() {
+            self.data[i].subtract_row(&new_row, factor);
+        }
     }
 }
 ```
 
-Optimization: Instead of full back-substitution at the end, incrementally maintain
-reduced form as pivots are added.
-
-4. Early Termination
-
-```rs
-if self.rank >= self.chunk_count {
-    return self.decode_final();  // Done! No need to process more packets
+#### 4. Final Reconstruction
+```rust
+pub(crate) fn decode(&self, chunk_size: usize) -> Result<Bytes, RLNCError> {
+    // Extract chunks from pivot rows (already in RREF)
+    let mut chunks = vec![vec![0u8; chunk_size]; self.chunk_count];
+    for (col, row_idx) in self.pivots.iter().enumerate()
+        .filter_map(|(i, &r)| r.map(|r| (i, r))) {
+        // Copy GF256 data to u8 chunks
+        for i in 0..chunk_size {
+            chunks[col][i] = self.data[row_idx].data[i].into();
+        }
+    }
+    
+    // Concatenate chunks and find boundary marker
+    let decoded = chunks.concat();
+    let boundary_pos = decoded.iter().rposition(|&b| b == BOUNDARY_MARKER)?;
+    Ok(decoded[..boundary_pos])
 }
 ```
-Optimization: Stop processing as soon as we have enough linearly independent packets.
 
-5. Lazy Final Reconstruction (decode_final)
+### Memory Layout and Optimization
 
-```rs
-fn decode_final(&self) -> Result<Option<Bytes>, RLNCError> {
-    // Matrix is already in reduced row echelon form!
-    // Just extract the chunks and concatenate
-}
-```
+The decoder uses several optimizations for efficiency:
 
-Optimization: The matrix is maintained in solved form throughout, so final extraction
-is just copying data.
+1. **Sparse Matrix Storage**: Only stores linearly independent packets
+2. **Pivot Tracking**: Direct O(1) column-to-row mapping via `pivots` array  
+3. **Online Processing**: Eliminates packets immediately upon arrival
+4. **Early Termination**: Stops when `rank >= chunk_count`
+5. **Incremental RREF**: Maintains reduced form throughout process
 
-Memory and Computational Benefits
+### Decoding Flow Example
 
-| Aspect      | Basic Gaussian          | RLNC Decoder                 |
-|-------------|-------------------------|------------------------------|
-| Memory      | Store full n×n matrix   | Store only rank pivot rows   |
-| Latency     | Wait for all packets    | Process packets immediately  |
-| Computation | Full elimination at end | Incremental elimination      |
-| Network     | Needs exactly n packets | Can handle redundant packets |
+For a 3-chunk system:
 
-Visual Summary
+1. **Packet 1**: `[2,3,1] → data1`
+   - No elimination needed (first packet)
+   - Normalize: `[1,1.5,0.5] → normalized_data1`  
+   - Store as pivot for column 0
+   - `rank = 1`
 
-```text
-Traditional:    [Collect] → [Full Elimination] → [Back-Sub] → [Extract]
-RLNC Decoder:   [Process packet] → [Immediate elimination] → [Incremental back-sub]
-                      ↓                    ↓                        ↓
-                   Always ready         Maintain RREF           Extract when rank = n
-```
+2. **Packet 2**: `[1,2,3] → data2`
+   - Eliminate against column 0: `[0,0.5,2.5]`
+   - Normalize: `[0,1,5] → normalized_data2`
+   - Store as pivot for column 1, back-substitute
+   - `rank = 2`
 
-The RLNC decoder essentially maintains the matrix in Reduced Row Echelon Form (RREF)
-throughout the process, rather than doing batch elimination at the end. This enables
-immediate processing of packets as they arrive over the network!
+3. **Packet 3**: `[4,5,2] → data3`  
+   - Eliminate against columns 0,1: `[0,0,1]`
+   - Store as pivot for column 2
+   - `rank = 3 = chunk_count` → **DECODE COMPLETE**
+
+The matrix maintains RREF form throughout, enabling immediate extraction once sufficient rank is achieved.
