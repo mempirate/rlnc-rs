@@ -12,6 +12,8 @@ pub enum RLNCError {
     InvalidCodingVectorLength(usize, usize),
     #[error("Invalid encoding")]
     InvalidEncoding,
+    #[error("Not enough linearly independent packets to decode, have {0}, need {1}")]
+    NotEnoughPackets(usize, usize),
 }
 
 /// The boundary marker is a special byte that is used to separate the encoded data from the
