@@ -7,7 +7,7 @@ The RLNC decoder implements online Gaussian elimination to reconstruct original 
 ### Architecture Overview
 
 ```mermaid
-graph TD
+graph LR
     A[Coded Packet Arrives] --> B[Decoder::decode]
     B --> C[Matrix::push_rref]
     C --> D[Matrix::eliminate]
