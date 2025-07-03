@@ -96,7 +96,8 @@ impl Encoder {
         let mut result = vec![GF256::zero(); self.chunk_size];
 
         // TODO: Optimize this. SIMD? Parallel?
-        // https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
+        // - https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
+        // - https://github.com/geky/gf256?tab=readme-ov-file#hardware-support
         // First stage: divide the data into chunks
         for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
             if coefficient == GF256::zero() {
@@ -104,8 +105,8 @@ impl Encoder {
                 continue;
             }
 
-            // Second stage: decompose chunks into symbols (GF256 -> u8), and multiply by the
-            // coefficient.
+            // Second stage: decompose chunks into symbols (GF256 -> u8), and perform
+            // element-wise multiplication with the coefficient.
             //
             // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod GF(256))
             for (i, &byte) in chunk.iter().enumerate() {

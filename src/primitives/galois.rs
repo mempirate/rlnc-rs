@@ -297,7 +297,6 @@ mod tests {
 
             prop_assert_ne!(current, GF256::zero());
         }
-
     }
 
     #[test]
