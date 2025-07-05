@@ -1,6 +1,5 @@
 //! Module that implements the RLNC encoding algorithm.
 
-use bytes::{BufMut, Bytes, BytesMut};
 use rand::Rng;
 
 use crate::{
@@ -9,10 +8,10 @@ use crate::{
 };
 
 /// RLNC Encoder.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Encoder {
     // The original data to be encoded.
-    data: Bytes,
+    data: Vec<u8>,
     // The number of chunks to split the data into (also known as the generation size).
     chunk_count: usize,
     // The size of each chunk in bytes.
@@ -36,8 +35,8 @@ impl Encoder {
             return Err(RLNCError::ZeroChunkCount);
         }
 
-        let mut data = BytesMut::from(data.as_ref());
-        data.put_u8(BOUNDARY_MARKER);
+        let mut data = Vec::from(data.as_ref());
+        data.push(BOUNDARY_MARKER);
 
         // Calculate chunk size to accommodate original data + boundary marker
         let chunk_size = data.len().div_ceil(chunk_count);
@@ -46,7 +45,7 @@ impl Encoder {
         // Pad the rest with zeros if needed
         data.resize(padded_len, 0);
 
-        Ok(Self { data: data.freeze(), chunk_count, chunk_size })
+        Ok(Self { data, chunk_count, chunk_size })
     }
 
     /// Returns the number of chunks the data was split into.

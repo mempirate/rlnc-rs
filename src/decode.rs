@@ -1,7 +1,5 @@
 //! Module that implements the RLNC decoding algorithm.
 
-use bytes::Bytes;
-
 use crate::{common::RLNCError, matrix::Matrix, primitives::packet::RLNCPacket};
 
 /// RLNC Decoder.
@@ -33,7 +31,7 @@ impl Decoder {
 
     /// Decodes a coded packet. If the decoder has enough linearly independent packets, it will
     /// return the original data.
-    pub fn decode(&mut self, packet: RLNCPacket) -> Result<Option<Bytes>, RLNCError> {
+    pub fn decode(&mut self, packet: RLNCPacket) -> Result<Option<Vec<u8>>, RLNCError> {
         if packet.coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength(
                 packet.coding_vector.len(),

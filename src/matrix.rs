@@ -1,5 +1,3 @@
-use bytes::{Bytes, BytesMut};
-
 use crate::{common::RLNCError, primitives::packet::RLNCPacket};
 
 /// A RREF matrix of coded packets, used to store the received coded packets and perform online
@@ -29,7 +27,7 @@ impl Matrix {
     }
 
     /// Decodes the original data from the matrix.
-    pub(crate) fn decode(&self, chunk_size: usize) -> Result<Bytes, RLNCError> {
+    pub(crate) fn decode(&self, chunk_size: usize) -> Result<Vec<u8>, RLNCError> {
         if !self.can_decode() {
             return Err(RLNCError::NotEnoughPackets(self.rank, self.chunk_count));
         }
@@ -51,20 +49,19 @@ impl Matrix {
         }
 
         // Reconstruct the original data by concatenating chunks
-        let mut decoded = BytesMut::with_capacity(chunk_size * self.chunk_count);
+        let mut decoded = Vec::with_capacity(chunk_size * self.chunk_count);
         for chunk in chunks {
             decoded.extend_from_slice(&chunk);
         }
 
         // Find the LAST boundary marker and truncate (since encoder places it at the end)
-        let decoded_bytes = decoded.freeze();
-        let Some(boundary_pos) =
-            decoded_bytes.iter().rposition(|&b| b == crate::common::BOUNDARY_MARKER)
+        let Some(boundary_pos) = decoded.iter().rposition(|&b| b == crate::common::BOUNDARY_MARKER)
         else {
             return Err(RLNCError::InvalidEncoding);
         };
 
-        Ok(decoded_bytes.slice(0..boundary_pos))
+        decoded.truncate(boundary_pos);
+        Ok(decoded)
     }
 
     /// Pushes a new packet into the matrix, which will be eliminated against the existing rows.
