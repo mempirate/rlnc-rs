@@ -1,5 +1,6 @@
 use super::galois::GF256;
 
+/// A coded packet.
 #[derive(Debug, Clone)]
 pub struct RLNCPacket {
     /// The coding vector (coefficients).

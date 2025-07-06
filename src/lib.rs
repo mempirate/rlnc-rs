@@ -7,7 +7,7 @@ mod common;
 pub mod decode;
 pub mod encode;
 mod matrix;
-mod primitives;
+pub mod primitives;
 
 #[cfg(test)]
 mod tests {
