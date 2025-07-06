@@ -7,6 +7,20 @@ use crate::{
     primitives::{galois::GF256, packet::RLNCPacket},
 };
 
+/// Helper function that encodes the data into `chunk_count` packets with random coding vectors, and
+/// returns a vector of encoded packets.
+pub fn encode(data: &[u8], chunk_count: usize) -> Result<Vec<RLNCPacket>, RLNCError> {
+    let encoder = Encoder::new(data, chunk_count)?;
+
+    let mut rng = rand::rng();
+    let mut packets = Vec::with_capacity(chunk_count);
+    for _ in 0..chunk_count {
+        packets.push(encoder.encode(&mut rng)?);
+    }
+
+    Ok(packets)
+}
+
 /// RLNC Encoder.
 #[derive(Debug)]
 pub struct Encoder {
