@@ -1,7 +1,7 @@
 //! # RLNC - Random Linear Network Coding
 //!
 //! This library provides an implementation of Random Linear Network Coding (RLNC)
-//! over the Galois Field GF(256).
+//! using Curve25519 scalar arithmetic.
 
 mod common;
 pub mod decode;
@@ -14,7 +14,8 @@ mod tests {
     use rand::Rng;
     use std::time::Instant;
 
-    use super::{decode::Decoder, encode::Encoder, primitives::galois::GF256};
+    use super::{decode::Decoder, encode::Encoder};
+    use curve25519_dalek::Scalar;
 
     #[test]
     fn test_encode_decode_with_random_vectors() {
@@ -65,7 +66,7 @@ mod tests {
         let chunk_count = 1;
 
         let encoder = Encoder::new(original_data, chunk_count).unwrap();
-        let packet = encoder.encode_with_vector(&[GF256::from(1)]).unwrap();
+        let packet = encoder.encode_with_vector(&[Scalar::ONE]).unwrap();
 
         let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
         let decoded = decoder.decode(packet).unwrap();
@@ -73,5 +74,21 @@ mod tests {
         assert!(decoded.is_some());
         let decoded_data = decoded.unwrap();
         assert!(decoded_data.starts_with(original_data));
+    }
+
+    #[test]
+    fn test_scalar_packing_unpacking() {
+        use crate::encode::{scalars_to_bytes, bytes_to_scalars};
+        
+        let original_bytes = (0..62).collect::<Vec<u8>>(); // 62 bytes = 2 scalars (31 each)
+        let scalars = bytes_to_scalars(&original_bytes);
+        let unpacked_bytes = scalars_to_bytes(&scalars);
+        
+        println!("Original: {:?}", &original_bytes[..10]);
+        println!("Unpacked: {:?}", &unpacked_bytes[..10]);
+        println!("Original len: {}, Unpacked len: {}", original_bytes.len(), unpacked_bytes.len());
+        
+        // The unpacked should match the original exactly for this size
+        assert_eq!(original_bytes, unpacked_bytes);
     }
 }

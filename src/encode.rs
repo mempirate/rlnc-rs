@@ -1,10 +1,11 @@
 //! Module that implements the RLNC encoding algorithm.
 
+use curve25519_dalek::Scalar;
 use rand::Rng;
 
 use crate::{
     common::{BOUNDARY_MARKER, RLNCError},
-    primitives::{galois::GF256, packet::RLNCPacket},
+    primitives::packet::RLNCPacket,
 };
 
 /// Helper function that encodes the data into `chunk_count` packets with random coding vectors, and
@@ -54,6 +55,9 @@ impl Encoder {
 
         // Calculate chunk size to accommodate original data + boundary marker
         let chunk_size = data.len().div_ceil(chunk_count);
+        
+        // Round up chunk size to nearest multiple of 31 for scalar packing
+        let chunk_size = chunk_size.div_ceil(31) * 31;
         let padded_len = chunk_size * chunk_count;
 
         // Pad the rest with zeros if needed
@@ -100,13 +104,15 @@ impl Encoder {
     /// # Algorithm Complexity
     /// O(k * n) where k is the chunk count and n is the chunk size.
     /// ```
-    pub fn encode_with_vector(&self, coding_vector: &[GF256]) -> Result<RLNCPacket, RLNCError> {
+    pub fn encode_with_vector(&self, coding_vector: &[Scalar]) -> Result<RLNCPacket, RLNCError> {
         if coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
         }
 
-        // The result is a vector of GF256 values, one for each byte in the chunk.
-        let mut result = vec![GF256::zero(); self.chunk_size];
+        let new_chunk_size = self.chunk_size.div_ceil(31);
+
+        // The result is a vector of Scalar values, one for each byte in the chunk.
+        let mut result = vec![Scalar::ZERO; new_chunk_size];
 
         // TODO: Optimize this. SIMD? Parallel?
         // - https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
@@ -114,17 +120,19 @@ impl Encoder {
         // - https://github.com/AndersTrier/reed-solomon-simd
         // First stage: divide the data into chunks
         for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
-            if coefficient == GF256::zero() {
+            if coefficient == Scalar::ZERO {
                 // Result is zero, skip.
                 continue;
             }
 
-            // Second stage: decompose chunks into symbols (GF256 -> u8), and perform
+            let symbols = bytes_to_scalars(chunk);
+
+            // Second stage: decompose chunks into symbols and perform
             // element-wise multiplication with the coefficient.
             //
-            // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod GF(256))
-            for (i, &byte) in chunk.iter().enumerate() {
-                result[i] += GF256::from(byte) * coefficient;
+            // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])
+            for (i, symbol) in symbols.iter().enumerate() {
+                result[i] += symbol * coefficient;
             }
         }
 
@@ -132,11 +140,37 @@ impl Encoder {
     }
 
     /// Encodes the data with a random coding vector, using the provided random number generator.
-    pub fn encode<R: Rng>(&self, rng: R) -> Result<RLNCPacket, RLNCError> {
-        let coding_vector = rng.random_iter().take(self.chunk_count).collect::<Vec<_>>();
+    pub fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
+        let coding_vector: Vec<Scalar> =
+            (0..self.chunk_count).map(|_| Scalar::from(rng.random::<u64>())).collect();
 
         self.encode_with_vector(&coding_vector)
     }
+}
+
+pub(crate) fn bytes_to_scalars(bytes: &[u8]) -> Vec<Scalar> {
+    // Use 31 bytes per scalar to stay safely within the field
+    // This avoids modular reduction and preserves data integrity
+    bytes
+        .chunks(31)
+        .map(|chunk| {
+            let mut array = [0u8; 32];
+            array[..chunk.len()].copy_from_slice(chunk);
+            // The last byte stays 0, ensuring we're always in range
+            Scalar::from_bytes_mod_order(array)
+        })
+        .collect()
+}
+
+pub(crate) fn scalars_to_bytes(scalars: &[Scalar]) -> Vec<u8> {
+    scalars
+        .iter()
+        .flat_map(|scalar| {
+            let bytes = scalar.to_bytes();
+            // Return only the first 31 bytes (last byte should be 0)
+            bytes[..31].to_vec()
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -155,6 +189,6 @@ mod tests {
 
         println!("{:?}", packet);
 
-        assert_eq!(packet.data.len(), encoder.chunk_size);
+        assert_eq!(packet.data.len(), encoder.chunk_size.div_ceil(31));
     }
 }
