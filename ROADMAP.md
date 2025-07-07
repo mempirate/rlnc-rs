@@ -13,3 +13,23 @@
 - [ ] Test [Bareiss algorithm](https://en.wikipedia.org/wiki/Bareiss_algorithm) for elimination
     - For large fields like `Scalar` from `curve25519-dalek`, division (which depends on inversion) is very slow. Bareiss algorithm is a way to reduce the number of inversions.
 - [ ] Recoding with homomorphic authentication & integrity protection
+    - Options: [Pedersen commitments](https://en.wikipedia.org/wiki/Pedersen_commitment), [LtHash](https://engineering.fb.com/2019/03/01/security/homomorphic-hashing/)
+
+## Other Ideas
+- [ ] If all peers in the network have known public keys, can we use that public key to determine the coding vector? What does that give us?
+- [ ] LtHash for homomorphic hashing
+
+Claude says:
+ Major Benefits:
+
+  - Bandwidth savings from implicit coding vectors
+  - Fast GF(256) arithmetic with security guarantees
+  - Network coordination capabilities
+  - Attribution and accountability
+
+  Suitable For:
+
+  - Permissioned networks where public keys are known
+  - Applications requiring accountability (financial, audit trails)
+  - Bandwidth-constrained environments
+  - Performance-critical scenarios where fast GF(256) is essential
