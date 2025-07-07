@@ -11,6 +11,15 @@ In most cases, compute overhead is not a problem anymore, and can be heavily opt
 ## Byzantine Fault Tolerance
 RLNC is great, but it's not deployable in adversarial networks as-is. [Pollution attacks](https://en.wikipedia.org/wiki/Homomorphic_signatures_for_network_coding) are extremely destructive, and can cause the network to fail to reconstruct the original data. Therefore, we need to add some form of authentication and integrity protection to the packets, which is the challenging part.
 
+The general flow would work like this:
+- Source node has known public key
+- Source node divides data into chunks and commits to them (using signature)
+- Source node encodes data into packets (i.e. combines chunks with coding vector)
+- **The commitment is also combined, and remains valid!**
+- Source node sends coded packets to the network
+- Receiving nodes can individually ensure the authenticity of the coded packets, and the integrity of the data
+- This specifically means that receiving nodes can verify that a) the original data was broadcast by the source node, and b) the data was not invalidly modified by a malicious node in the network
+
 There are some options for authentication and integrity protection, all with different tradeoffs (and lack of implementations):
 
 - [Merkle tree authentication](https://en.wikipedia.org/wiki/Merkle_tree)
