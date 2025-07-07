@@ -38,7 +38,7 @@ There are some options for authentication and integrity protection, all with dif
     - **Have not found any production implementations!**
 - [LtHash](https://engineering.fb.com/2019/03/01/security/homomorphic-hashing/)
     - Proposed in https://engineering.fb.com/2019/03/01/security/homomorphic-hashing/ (Note that this specifically won't work because it's only homomorphic for XOR operations)
-    - Maybe there are variants of these hashes that are additively homomorphic?
+    - Maybe there are variants of these hashes that are additively homomorphic or a way to leverage these for what we need?
     - **Unsure if this is secure with small fields, to investigate!**
 
 It comes down to this: for authentication in full RLNC, you need either an additively homomorphic hash, commitment, or signature.
