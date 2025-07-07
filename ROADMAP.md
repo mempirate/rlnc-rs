@@ -7,6 +7,8 @@
 - [ ] SIMD optimizations for `GF(2^8)`
 - [ ] Network simulation
 
+Goal: high-performance source-only RLNC for non-adversarial networks. Source-only authentication & integrity protection.
+
 ## 0.2.0: Cryptographically Secure RLNC (Adversarial)
 - [ ] Prime field support
 - [ ] Additive homomorphic authentication & integrity protection with Pedersen commitments
@@ -14,6 +16,8 @@
     - For large fields like `Scalar` from `curve25519-dalek`, division (which depends on inversion) is very slow. Bareiss algorithm is a way to reduce the number of inversions.
 - [ ] Recoding with homomorphic authentication & integrity protection
     - Options: [Pedersen commitments](https://en.wikipedia.org/wiki/Pedersen_commitment), [LtHash](https://engineering.fb.com/2019/03/01/security/homomorphic-hashing/)
+
+Goal: high-performance, full RLNC for adversarial networks.
 
 ## Other Ideas
 - [ ] If all peers in the network have known public keys, can we use that public key to determine the coding vector? What does that give us?
