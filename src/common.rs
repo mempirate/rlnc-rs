@@ -19,3 +19,10 @@ pub enum RLNCError {
 /// The boundary marker is a special byte that is used to separate the encoded data from the
 /// padding.
 pub(crate) const BOUNDARY_MARKER: u8 = 0x81;
+
+/// The number of bytes that can be safely stored in a BLS12-381 scalar without modular reduction.
+/// 
+/// BLS12-381 scalars are 255-bit numbers (32 bytes), but the field modulus is slightly less than 2^255.
+/// By using only 31 bytes (248 bits), we guarantee the value is always less than the modulus,
+/// avoiding the need for modular reduction and ensuring data integrity during encode/decode.
+pub(crate) const SAFE_BYTES_PER_SCALAR: usize = 31;

@@ -14,8 +14,7 @@ mod tests {
     use rand::Rng;
     use std::time::Instant;
 
-    use super::{decode::Decoder, encode::Encoder};
-    use curve25519_dalek::Scalar;
+    use super::{decode::Decoder, encode::Encoder, primitives::field::Scalar};
 
     #[test]
     fn test_encode_decode_with_random_vectors() {
@@ -66,7 +65,7 @@ mod tests {
         let chunk_count = 1;
 
         let encoder = Encoder::new(original_data, chunk_count).unwrap();
-        let packet = encoder.encode_with_vector(&[Scalar::ONE]).unwrap();
+        let packet = encoder.encode_with_vector(&[Scalar::one()]).unwrap();
 
         let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
         let decoded = decoder.decode(packet).unwrap();
@@ -78,16 +77,16 @@ mod tests {
 
     #[test]
     fn test_scalar_packing_unpacking() {
-        use crate::encode::{scalars_to_bytes, bytes_to_scalars};
-        
+        use crate::{encode::bytes_to_scalars, matrix::scalars_to_bytes};
+
         let original_bytes = (0..62).collect::<Vec<u8>>(); // 62 bytes = 2 scalars (31 each)
         let scalars = bytes_to_scalars(&original_bytes);
         let unpacked_bytes = scalars_to_bytes(&scalars);
-        
+
         println!("Original: {:?}", &original_bytes[..10]);
         println!("Unpacked: {:?}", &unpacked_bytes[..10]);
         println!("Original len: {}, Unpacked len: {}", original_bytes.len(), unpacked_bytes.len());
-        
+
         // The unpacked should match the original exactly for this size
         assert_eq!(original_bytes, unpacked_bytes);
     }

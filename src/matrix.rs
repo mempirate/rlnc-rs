@@ -1,4 +1,7 @@
-use crate::{common::RLNCError, primitives::packet::RLNCPacket, encode::scalars_to_bytes};
+use crate::{
+    common::{RLNCError, SAFE_BYTES_PER_SCALAR},
+    primitives::{field::Scalar, packet::RLNCPacket},
+};
 
 /// A RREF matrix of coded packets, used to store the received coded packets and perform online
 /// Gaussian elimination. To perform elimination efficiently, we store the pivots in a separate
@@ -13,6 +16,18 @@ pub(crate) struct Matrix {
     pivots: Vec<Option<usize>>,
     /// The number of linearly independent coded packets received (= rank of the matrix).
     rank: usize,
+}
+
+pub(crate) fn scalars_to_bytes(scalars: &[Scalar]) -> Vec<u8> {
+    // Extract bytes from scalars - we stored 31 bytes per scalar
+    scalars
+        .iter()
+        .flat_map(|scalar| {
+            let bytes = scalar.to_bytes();
+            // Return only the first 31 bytes (as we stored them)
+            bytes[..SAFE_BYTES_PER_SCALAR].to_vec()
+        })
+        .collect()
 }
 
 impl Matrix {
@@ -32,8 +47,8 @@ impl Matrix {
             return Err(RLNCError::NotEnoughPackets(self.rank, self.chunk_count));
         }
 
-        let scalars_per_chunk = chunk_size.div_ceil(31);
-        let mut chunk_scalars = vec![vec![curve25519_dalek::Scalar::ZERO; scalars_per_chunk]; self.chunk_count];
+        let scalars_per_chunk = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
+        let mut chunk_scalars = vec![vec![Scalar::zero(); scalars_per_chunk]; self.chunk_count];
 
         // Extract packed scalars from pivot rows (they're already normalized)
         for (col, row_idx) in self
@@ -99,11 +114,11 @@ impl Matrix {
         {
             let coeff = packet.coding_vector[col];
 
-            if coeff != curve25519_dalek::Scalar::ZERO {
+            if coeff != Scalar::zero() {
                 let pivot_row = &self.data[row];
                 let pivot_coeff = pivot_row.coding_vector[col];
 
-                let factor = coeff * pivot_coeff.invert();
+                let factor = coeff * pivot_coeff.invert().unwrap();
                 packet.subtract_row(pivot_row, factor);
             }
         }
@@ -119,7 +134,7 @@ impl Matrix {
 
         for i in 0..new_row_idx {
             let coeff = self.data[i].coding_vector[new_pivot_col];
-            if coeff != curve25519_dalek::Scalar::ZERO {
+            if coeff != Scalar::zero() {
                 let factor = coeff;
                 self.data[i].subtract_row(&new_row, factor);
             }

@@ -1,5 +1,6 @@
-//! Primitives used by the library.
-pub(crate) mod galois;
 pub(crate) mod packet;
 
-pub use packet::RLNCPacket;
+pub(crate) mod field {
+    pub(crate) use bls12_381::Scalar;
+    pub(crate) use ff::Field;
+}

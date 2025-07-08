@@ -8,10 +8,17 @@ resolver = "2"
 [dependencies]
 rand = "0.9.1"
 thiserror = "2.0.12"
-curve25519-dalek = "4.0.0"
+bls12_381 = "0.8.0"
+ff = "0.13"
 
 [dev-dependencies]
 proptest = "1.7"
+
+[profile.maxperf]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+incremental = false
 
 [lints]
 rust.missing_debug_implementations = "warn"

@@ -1,11 +1,10 @@
 //! Module that implements the RLNC encoding algorithm.
 
-use curve25519_dalek::Scalar;
 use rand::Rng;
 
 use crate::{
-    common::{BOUNDARY_MARKER, RLNCError},
-    primitives::packet::RLNCPacket,
+    common::{BOUNDARY_MARKER, RLNCError, SAFE_BYTES_PER_SCALAR},
+    primitives::{field::Scalar, packet::RLNCPacket},
 };
 
 /// Helper function that encodes the data into `chunk_count` packets with random coding vectors, and
@@ -55,9 +54,9 @@ impl Encoder {
 
         // Calculate chunk size to accommodate original data + boundary marker
         let chunk_size = data.len().div_ceil(chunk_count);
-        
+
         // Round up chunk size to nearest multiple of 31 for scalar packing
-        let chunk_size = chunk_size.div_ceil(31) * 31;
+        let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
         let padded_len = chunk_size * chunk_count;
 
         // Pad the rest with zeros if needed
@@ -109,10 +108,8 @@ impl Encoder {
             return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
         }
 
-        let new_chunk_size = self.chunk_size.div_ceil(31);
-
         // The result is a vector of Scalar values, one for each byte in the chunk.
-        let mut result = vec![Scalar::ZERO; new_chunk_size];
+        let mut result = vec![Scalar::zero(); self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
 
         // TODO: Optimize this. SIMD? Parallel?
         // - https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
@@ -120,7 +117,7 @@ impl Encoder {
         // - https://github.com/AndersTrier/reed-solomon-simd
         // First stage: divide the data into chunks
         for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
-            if coefficient == Scalar::ZERO {
+            if coefficient == Scalar::zero() {
                 // Result is zero, skip.
                 continue;
             }
@@ -141,8 +138,13 @@ impl Encoder {
 
     /// Encodes the data with a random coding vector, using the provided random number generator.
     pub fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
-        let coding_vector: Vec<Scalar> =
-            (0..self.chunk_count).map(|_| Scalar::from(rng.random::<u64>())).collect();
+        let coding_vector: Vec<Scalar> = (0..self.chunk_count)
+            .map(|_| {
+                let mut bytes = [0u8; 32];
+                rng.fill(&mut bytes[..31]);
+                Scalar::from_bytes(&bytes).unwrap()
+            })
+            .collect();
 
         self.encode_with_vector(&coding_vector)
     }
@@ -152,23 +154,11 @@ pub(crate) fn bytes_to_scalars(bytes: &[u8]) -> Vec<Scalar> {
     // Use 31 bytes per scalar to stay safely within the field
     // This avoids modular reduction and preserves data integrity
     bytes
-        .chunks(31)
+        .chunks(SAFE_BYTES_PER_SCALAR)
         .map(|chunk| {
-            let mut array = [0u8; 32];
-            array[..chunk.len()].copy_from_slice(chunk);
-            // The last byte stays 0, ensuring we're always in range
-            Scalar::from_bytes_mod_order(array)
-        })
-        .collect()
-}
-
-pub(crate) fn scalars_to_bytes(scalars: &[Scalar]) -> Vec<u8> {
-    scalars
-        .iter()
-        .flat_map(|scalar| {
-            let bytes = scalar.to_bytes();
-            // Return only the first 31 bytes (last byte should be 0)
-            bytes[..31].to_vec()
+            let mut bytes = [0u8; 32];
+            bytes[..chunk.len()].copy_from_slice(chunk);
+            Scalar::from_bytes(&bytes).unwrap()
         })
         .collect()
 }

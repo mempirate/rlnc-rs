@@ -1,4 +1,4 @@
-use curve25519_dalek::Scalar;
+use super::field::{Field, Scalar};
 
 /// A coded packet.
 #[derive(Debug, Clone)]
@@ -12,24 +12,26 @@ pub struct RLNCPacket {
 impl RLNCPacket {
     /// Returns the number of non-zero coefficients in the coding vector.
     pub fn degree(&self) -> usize {
-        self.coding_vector.iter().filter(|&c| c != &Scalar::ZERO).count()
+        self.coding_vector.iter().filter(|&c| !bool::from(c.is_zero())).count()
     }
 
     /// Returns the index of the leading coefficient (non-zero coefficient).
     pub fn leading_coefficient(&self) -> Option<usize> {
-        self.coding_vector.iter().position(|c| c != &Scalar::ZERO)
+        self.coding_vector.iter().position(|c| !bool::from(c.is_zero()))
     }
 
     /// Normalizes the packet so the leading coefficient is 1.
     pub fn normalize(&mut self) {
         if let Some(col) = self.leading_coefficient() {
             let leading_coeff = self.coding_vector[col];
+            let inv = leading_coeff.invert().unwrap();
+
             for i in 0..self.coding_vector.len() {
-                self.coding_vector[i] = self.coding_vector[i] * leading_coeff.invert();
+                self.coding_vector[i] = self.coding_vector[i] * inv;
             }
 
             for i in 0..self.data.len() {
-                self.data[i] = self.data[i] * leading_coeff.invert();
+                self.data[i] = self.data[i] * inv;
             }
         }
     }
