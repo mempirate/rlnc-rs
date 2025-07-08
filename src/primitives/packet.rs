@@ -22,13 +22,14 @@ impl RLNCPacket {
     /// Normalizes the packet so the leading coefficient is 1.
     pub fn normalize(&mut self) {
         if let Some(col) = self.leading_coefficient() {
-            let leading_coeff = self.coding_vector[col];
+            let inv = self.coding_vector[col].invert();
+
             for i in 0..self.coding_vector.len() {
-                self.coding_vector[i] = self.coding_vector[i] * leading_coeff.invert();
+                self.coding_vector[i] = self.coding_vector[i] * inv;
             }
 
             for i in 0..self.data.len() {
-                self.data[i] = self.data[i] * leading_coeff.invert();
+                self.data[i] = self.data[i] * inv;
             }
         }
     }
