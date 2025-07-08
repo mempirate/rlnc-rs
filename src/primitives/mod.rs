@@ -6,7 +6,7 @@ use crate::common::SAFE_BYTES_PER_SCALAR;
 
 /// A chunk of data.
 #[derive(Debug, Clone)]
-pub struct Chunk {
+pub(crate) struct Chunk {
     bytes: Vec<u8>,
     scalars: Vec<Scalar>,
 }
