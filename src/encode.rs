@@ -145,7 +145,7 @@ impl Encoder {
         let coding_vector: Vec<Scalar> = (0..self.chunk_count)
             .map(|_| {
                 let mut bytes = [0u8; 32];
-                rng.fill(&mut bytes[..31]);
+                rng.fill(&mut bytes[..SAFE_BYTES_PER_SCALAR]);
                 Scalar::from_bytes_le(&bytes).unwrap()
             })
             .collect();
@@ -170,6 +170,6 @@ mod tests {
 
         println!("{:?}", packet);
 
-        assert_eq!(packet.data.len(), encoder.chunk_size.div_ceil(31));
+        assert_eq!(packet.data.len(), encoder.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR));
     }
 }

@@ -1,3 +1,4 @@
+//! RLNC primitives.
 pub(crate) mod packet;
 
 use field::Scalar;
@@ -12,7 +13,8 @@ pub(crate) struct Chunk {
 }
 
 impl Chunk {
-    /// Creates a new chunk from a slice of bytes.
+    /// Creates a new chunk from a slice of bytes, and converts it into a vector of scalars
+    /// (symbols used for encoding).
     pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
         Self {
             bytes: bytes.to_vec(),
