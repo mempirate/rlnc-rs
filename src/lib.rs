@@ -78,20 +78,4 @@ mod tests {
         let decoded_data = decoded.unwrap();
         assert!(decoded_data.starts_with(original_data));
     }
-
-    #[test]
-    fn test_scalar_packing_unpacking() {
-        use crate::{encode::bytes_to_scalars, matrix::scalars_to_bytes};
-
-        let original_bytes = (0..62).collect::<Vec<u8>>(); // 62 bytes = 2 scalars (31 each)
-        let scalars = bytes_to_scalars(&original_bytes);
-        let unpacked_bytes = scalars_to_bytes(&scalars);
-
-        println!("Original: {:?}", &original_bytes[..10]);
-        println!("Unpacked: {:?}", &unpacked_bytes[..10]);
-        println!("Original len: {}, Unpacked len: {}", original_bytes.len(), unpacked_bytes.len());
-
-        // The unpacked should match the original exactly for this size
-        assert_eq!(original_bytes, unpacked_bytes);
-    }
 }

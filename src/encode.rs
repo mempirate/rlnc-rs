@@ -5,6 +5,7 @@ use rand::Rng;
 use crate::{
     common::{BOUNDARY_MARKER, RLNCError, SAFE_BYTES_PER_SCALAR},
     primitives::{
+        Chunk,
         field::{Field, Scalar},
         packet::RLNCPacket,
     },
@@ -27,8 +28,8 @@ pub fn encode(data: &[u8], chunk_count: usize) -> Result<Vec<RLNCPacket>, RLNCEr
 /// RLNC Encoder.
 #[derive(Debug)]
 pub struct Encoder {
-    // The original data to be encoded.
-    data: Vec<u8>,
+    // The chunks of data to be encoded.
+    chunks: Vec<Chunk>,
     // The number of chunks to split the data into (also known as the generation size).
     chunk_count: usize,
     // The size of each chunk in bytes.
@@ -65,7 +66,9 @@ impl Encoder {
         // Pad the rest with zeros if needed
         data.resize(padded_len, 0);
 
-        Ok(Self { data, chunk_count, chunk_size })
+        let chunks = data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect();
+
+        Ok(Self { chunks, chunk_count, chunk_size })
     }
 
     /// Returns the number of chunks the data was split into.
@@ -82,7 +85,7 @@ impl Encoder {
     ///
     /// This method computes a coded packet by taking a linear combination of all chunks
     /// using the coefficients from the coding vector. The operation is performed in
-    /// Galois Field GF(256).
+    /// the field of BLS12-381.
     ///
     /// # Mathematical Representation
     ///
@@ -94,8 +97,8 @@ impl Encoder {
     /// ```
     ///
     /// Where:
-    /// - ⊗ denotes multiplication in GF(256)
-    /// - ⊕ denotes addition in GF(256) (equivalent to XOR)
+    /// - ⊗ denotes multiplication in the field of BLS12-381
+    /// - ⊕ denotes addition in the field of BLS12-381
     /// - k is the chunk count (generation size)
     ///
     /// Each byte position j in the coded packet is computed as:
@@ -119,19 +122,17 @@ impl Encoder {
         // - https://github.com/geky/gf256?tab=readme-ov-file#hardware-support
         // - https://github.com/AndersTrier/reed-solomon-simd
         // First stage: divide the data into chunks
-        for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
+        for (chunk, &coefficient) in self.chunks.iter().zip(coding_vector) {
             if coefficient.is_zero_vartime() {
                 // Result is zero, skip.
                 continue;
             }
 
-            let symbols = bytes_to_scalars(chunk);
-
             // Second stage: decompose chunks into symbols and perform
             // element-wise multiplication with the coefficient.
             //
             // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])
-            for (i, symbol) in symbols.iter().enumerate() {
+            for (i, symbol) in chunk.scalars().iter().enumerate() {
                 result[i] += symbol * coefficient;
             }
         }
@@ -151,19 +152,6 @@ impl Encoder {
 
         self.encode_with_vector(&coding_vector)
     }
-}
-
-pub(crate) fn bytes_to_scalars(bytes: &[u8]) -> Vec<Scalar> {
-    // Use 31 bytes per scalar to stay safely within the field
-    // This avoids modular reduction and preserves data integrity
-    bytes
-        .chunks(SAFE_BYTES_PER_SCALAR)
-        .map(|chunk| {
-            let mut bytes = [0u8; 32];
-            bytes[..chunk.len()].copy_from_slice(chunk);
-            Scalar::from_bytes_le(&bytes).unwrap()
-        })
-        .collect()
 }
 
 #[cfg(test)]
