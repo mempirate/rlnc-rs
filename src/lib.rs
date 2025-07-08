@@ -1,7 +1,7 @@
 //! # RLNC - Random Linear Network Coding
 //!
 //! This library provides an implementation of Random Linear Network Coding (RLNC)
-//! using Curve25519 scalar arithmetic.
+//! using BLS12-381 scalar arithmetic.
 
 mod common;
 pub mod decode;
