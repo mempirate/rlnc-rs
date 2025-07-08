@@ -14,7 +14,11 @@ mod tests {
     use rand::Rng;
     use std::time::Instant;
 
-    use super::{decode::Decoder, encode::Encoder, primitives::field::Scalar};
+    use super::{
+        decode::Decoder,
+        encode::Encoder,
+        primitives::field::{Field, Scalar},
+    };
 
     #[test]
     fn test_encode_decode_with_random_vectors() {
@@ -65,7 +69,7 @@ mod tests {
         let chunk_count = 1;
 
         let encoder = Encoder::new(original_data, chunk_count).unwrap();
-        let packet = encoder.encode_with_vector(&[Scalar::one()]).unwrap();
+        let packet = encoder.encode_with_vector(&[Scalar::ONE]).unwrap();
 
         let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
         let decoded = decoder.decode(packet).unwrap();

@@ -9,6 +9,8 @@ resolver = "2"
 rand = "0.9.1"
 thiserror = "2.0.12"
 bls12_381 = "0.8.0"
+blstrs = "0.7.1"
+group = "0.13"
 
 [dev-dependencies]
 proptest = "1.7"

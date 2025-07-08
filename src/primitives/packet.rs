@@ -1,4 +1,4 @@
-use super::field::Scalar;
+use super::field::{Field, Scalar};
 
 /// A coded packet.
 #[derive(Debug, Clone)]
@@ -12,12 +12,12 @@ pub struct RLNCPacket {
 impl RLNCPacket {
     /// Returns the number of non-zero coefficients in the coding vector.
     pub fn degree(&self) -> usize {
-        self.coding_vector.iter().filter(|&c| c != &Scalar::zero()).count()
+        self.coding_vector.iter().filter(|&c| !c.is_zero_vartime()).count()
     }
 
     /// Returns the index of the leading coefficient (non-zero coefficient).
     pub fn leading_coefficient(&self) -> Option<usize> {
-        self.coding_vector.iter().position(|c| c != &Scalar::zero())
+        self.coding_vector.iter().position(|c| !c.is_zero_vartime())
     }
 
     /// Normalizes the packet so the leading coefficient is 1.

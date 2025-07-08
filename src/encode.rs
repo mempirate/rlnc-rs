@@ -4,7 +4,10 @@ use rand::Rng;
 
 use crate::{
     common::{BOUNDARY_MARKER, RLNCError, SAFE_BYTES_PER_SCALAR},
-    primitives::{field::Scalar, packet::RLNCPacket},
+    primitives::{
+        field::{Field, Scalar},
+        packet::RLNCPacket,
+    },
 };
 
 /// Helper function that encodes the data into `chunk_count` packets with random coding vectors, and
@@ -109,7 +112,7 @@ impl Encoder {
         }
 
         // The result is a vector of Scalar values, one for each byte in the chunk.
-        let mut result = vec![Scalar::zero(); self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
+        let mut result = vec![Scalar::ZERO; self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
 
         // TODO: Optimize this. SIMD? Parallel?
         // - https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
@@ -117,7 +120,7 @@ impl Encoder {
         // - https://github.com/AndersTrier/reed-solomon-simd
         // First stage: divide the data into chunks
         for (chunk, &coefficient) in self.data.chunks_exact(self.chunk_size).zip(coding_vector) {
-            if coefficient == Scalar::zero() {
+            if coefficient.is_zero_vartime() {
                 // Result is zero, skip.
                 continue;
             }
@@ -142,7 +145,7 @@ impl Encoder {
             .map(|_| {
                 let mut bytes = [0u8; 32];
                 rng.fill(&mut bytes[..31]);
-                Scalar::from_bytes(&bytes).unwrap()
+                Scalar::from_bytes_le(&bytes).unwrap()
             })
             .collect();
 
@@ -158,7 +161,7 @@ pub(crate) fn bytes_to_scalars(bytes: &[u8]) -> Vec<Scalar> {
         .map(|chunk| {
             let mut bytes = [0u8; 32];
             bytes[..chunk.len()].copy_from_slice(chunk);
-            Scalar::from_bytes(&bytes).unwrap()
+            Scalar::from_bytes_le(&bytes).unwrap()
         })
         .collect()
 }

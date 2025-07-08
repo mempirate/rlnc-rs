@@ -1,6 +1,9 @@
 use crate::{
     common::{RLNCError, SAFE_BYTES_PER_SCALAR},
-    primitives::{field::Scalar, packet::RLNCPacket},
+    primitives::{
+        field::{Field, Scalar},
+        packet::RLNCPacket,
+    },
 };
 
 /// A RREF matrix of coded packets, used to store the received coded packets and perform online
@@ -23,7 +26,7 @@ pub(crate) fn scalars_to_bytes(scalars: &[Scalar]) -> Vec<u8> {
     scalars
         .iter()
         .flat_map(|scalar| {
-            let bytes = scalar.to_bytes();
+            let bytes = scalar.to_bytes_le();
             // Return only the first 31 bytes (as we stored them)
             bytes[..SAFE_BYTES_PER_SCALAR].to_vec()
         })
@@ -48,7 +51,7 @@ impl Matrix {
         }
 
         let scalars_per_chunk = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
-        let mut chunk_scalars = vec![vec![Scalar::zero(); scalars_per_chunk]; self.chunk_count];
+        let mut chunk_scalars = vec![vec![Scalar::ZERO; scalars_per_chunk]; self.chunk_count];
 
         // Extract packed scalars from pivot rows (they're already normalized)
         for (col, row_idx) in self
@@ -114,7 +117,7 @@ impl Matrix {
         {
             let coeff = packet.coding_vector[col];
 
-            if coeff != Scalar::zero() {
+            if !coeff.is_zero_vartime() {
                 let pivot_row = &self.data[row];
                 let pivot_coeff = pivot_row.coding_vector[col];
 
@@ -134,7 +137,7 @@ impl Matrix {
 
         for i in 0..new_row_idx {
             let coeff = self.data[i].coding_vector[new_pivot_col];
-            if coeff != Scalar::zero() {
+            if !coeff.is_zero_vartime() {
                 let factor = coeff;
                 self.data[i].subtract_row(&new_row, factor);
             }
