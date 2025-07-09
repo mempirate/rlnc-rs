@@ -59,7 +59,7 @@ impl Encoder {
         // Calculate chunk size to accommodate original data + boundary marker
         let chunk_size = data.len().div_ceil(chunk_count);
 
-        // Round up chunk size to nearest multiple of 31 for scalar packing
+        // Round up chunk size to nearest multiple of `SAFE_BYTES_PER_SCALAR` for scalar packing
         let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
         let padded_len = chunk_size * chunk_count;
 
@@ -132,7 +132,7 @@ impl Encoder {
             // element-wise multiplication with the coefficient.
             //
             // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])
-            for (i, symbol) in chunk.scalars().iter().enumerate() {
+            for (i, symbol) in chunk.symbols().iter().enumerate() {
                 result[i] += symbol * coefficient;
             }
         }

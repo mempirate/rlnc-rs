@@ -8,8 +8,7 @@ use crate::common::SAFE_BYTES_PER_SCALAR;
 /// A chunk of data.
 #[derive(Debug, Clone)]
 pub(crate) struct Chunk {
-    bytes: Vec<u8>,
-    scalars: Vec<Scalar>,
+    symbols: Vec<Scalar>,
 }
 
 impl Chunk {
@@ -17,8 +16,7 @@ impl Chunk {
     /// (symbols used for encoding).
     pub(crate) fn from_bytes(bytes: &[u8]) -> Self {
         Self {
-            bytes: bytes.to_vec(),
-            scalars: bytes
+            symbols: bytes
                 .chunks(SAFE_BYTES_PER_SCALAR)
                 .map(|c| {
                     let mut bytes = [0u8; 32];
@@ -29,9 +27,9 @@ impl Chunk {
         }
     }
 
-    /// Converts the chunk into a vector of scalars.
-    pub(crate) fn scalars(&self) -> &[Scalar] {
-        &self.scalars
+    /// Returns the symbols of the chunk.
+    pub(crate) fn symbols(&self) -> &[Scalar] {
+        &self.symbols
     }
 }
 
