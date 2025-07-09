@@ -22,4 +22,5 @@ pub enum RLNCError {
 /// padding.
 pub(crate) const BOUNDARY_MARKER: u8 = 0x81;
 
+/// The number of bytes that can be safely packed into a scalar.
 pub(crate) const SAFE_BYTES_PER_SCALAR: usize = 31;

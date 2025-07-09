@@ -12,8 +12,15 @@ bls12_381 = "0.8.0"
 blstrs = "0.7.1"
 group = "0.13"
 
+rayon = { version = "1.10.0", optional = true }
+
 [dev-dependencies]
 proptest = "1.7"
+
+[features]
+default = ["parallel"]
+# Enable parallel encoding/decoding.
+parallel = ["dep:rayon"]
 
 [profile.maxperf]
 inherits = "release"

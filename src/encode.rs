@@ -1,5 +1,4 @@
 //! Module that implements the RLNC encoding algorithm.
-
 use rand::Rng;
 
 use crate::{
@@ -81,6 +80,19 @@ impl Encoder {
         self.chunk_size
     }
 
+    /// Returns true if the encoder should parallelize the encoding process.
+    ///
+    /// This is determined by the chunk count (collection size), chunk size (work unit size), and
+    /// the number of threads.
+    #[cfg(feature = "parallel")]
+    fn should_parallelize(&self) -> bool {
+        let min_chunks = rayon::current_num_threads();
+        // Work unit size: 32KiB
+        let min_bytes_per_chunk = 1024 * 32;
+
+        self.chunk_count >= min_chunks && self.chunk_size >= min_bytes_per_chunk
+    }
+
     /// Encodes the data with the given coding vector using linear combinations.
     ///
     /// This method computes a coded packet by taking a linear combination of all chunks
@@ -114,30 +126,68 @@ impl Encoder {
             return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
         }
 
-        // The result is a vector of Scalar values, one for each byte in the chunk.
+        let symbol_count = self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
+
+        // Compute the encoded result either sequentially or in parallel, depending on the
+        // enabled feature flag. We avoid sharing mutable state across threads by letting each
+        // worker produce a partial vector and then combining (reducing) the partial results.
+        #[cfg(feature = "parallel")]
+        let result = {
+            use rayon::prelude::*;
+
+            if !self.should_parallelize() {
+                // println!("sequential");
+                self.encode_inner(coding_vector)
+            } else {
+                // Map each (chunk, coefficient) pair to its contribution and then reduce all
+                // contributions into the final result.
+                self.chunks
+                    .par_iter()
+                    .zip(coding_vector)
+                    .map(|(chunk, &coefficient)| {
+                        // Allocate a local accumulator for this worker.
+                        let mut acc = Vec::with_capacity(symbol_count);
+
+                        if !coefficient.is_zero_vartime() {
+                            for symbol in chunk.symbols() {
+                                acc.push(*symbol * coefficient);
+                            }
+                        }
+
+                        acc
+                    })
+                    .reduce(
+                        || vec![Scalar::ZERO; symbol_count],
+                        |mut a, b| {
+                            // Element-wise addition of two partial results.
+                            a.iter_mut().zip(b).for_each(|(x, y)| *x += y);
+                            a
+                        },
+                    )
+            }
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let result = self.encode_inner(coding_vector);
+
+        Ok(RLNCPacket { coding_vector: coding_vector.to_vec(), data: result })
+    }
+
+    /// Sequentially encodes the data with the given coding vector using linear combinations.
+    fn encode_inner(&self, coding_vector: &[Scalar]) -> Vec<Scalar> {
         let mut result = vec![Scalar::ZERO; self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
 
-        // TODO: Optimize this. SIMD? Parallel?
-        // - https://ssrc.us/media/pubs/c9a735170a7e1aa648b261ec6ad615e34af566db.pdf
-        // - https://github.com/geky/gf256?tab=readme-ov-file#hardware-support
-        // - https://github.com/AndersTrier/reed-solomon-simd
-        // First stage: divide the data into chunks
         for (chunk, &coefficient) in self.chunks.iter().zip(coding_vector) {
             if coefficient.is_zero_vartime() {
-                // Result is zero, skip.
                 continue;
             }
 
-            // Second stage: decompose chunks into symbols and perform
-            // element-wise multiplication with the coefficient.
-            //
-            // Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])
             for (i, symbol) in chunk.symbols().iter().enumerate() {
                 result[i] += symbol * coefficient;
             }
         }
 
-        Ok(RLNCPacket { coding_vector: coding_vector.to_vec(), data: result })
+        result
     }
 
     /// Encodes the data with a random coding vector, using the provided random number generator.
