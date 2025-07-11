@@ -122,7 +122,7 @@ impl Encoder {
     ///
     /// Each byte position j in the coded packet is computed as:
     /// ```text
-    /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod GF(256))
+    /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod p)
     /// ```
     ///
     /// # Algorithm Complexity
@@ -150,17 +150,19 @@ impl Encoder {
                 self.chunks
                     .par_iter()
                     .zip(coding_vector)
-                    .map(|(chunk, &coefficient)| {
-                        // Allocate a local accumulator for this worker.
-                        let mut acc = Vec::with_capacity(symbol_count);
-
-                        if !coefficient.is_zero_vartime() {
-                            for symbol in chunk.symbols() {
-                                acc.push(*symbol * coefficient);
-                            }
+                    .filter_map(|(chunk, &coefficient)| {
+                        // Skip the work if the coefficient is zero.
+                        if coefficient.is_zero_vartime() {
+                            return None;
                         }
 
-                        acc
+                        let mut acc = Vec::with_capacity(symbol_count);
+
+                        for symbol in chunk.symbols().iter() {
+                            acc.push(*symbol * coefficient);
+                        }
+
+                        Some(acc)
                     })
                     .reduce(
                         || vec![Scalar::ZERO; symbol_count],
