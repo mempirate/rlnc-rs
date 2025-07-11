@@ -416,19 +416,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
-name = "rlnc"
-version = "0.1.0"
-dependencies = [
- "bls12_381",
- "blstrs",
- "group",
- "proptest",
- "rand 0.9.1",
- "rayon",
- "thiserror",
-]
-
-[[package]]
 name = "rustix"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -736,6 +723,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "zc-rlnc"
+version = "0.0.1"
+dependencies = [
+ "bls12_381",
+ "blstrs",
+ "group",
+ "proptest",
+ "rand 0.9.1",
+ "rayon",
+ "thiserror",
 ]
 
 [[package]]

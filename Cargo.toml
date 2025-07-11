@@ -1,6 +1,6 @@
 [package]
-name = "rlnc"
-version = "0.1.0"
+name = "zc-rlnc"
+version = "0.0.1"
 edition = "2024"
 exclude = [".github/"]
 resolver = "2"
