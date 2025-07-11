@@ -23,19 +23,15 @@ mod tests {
     #[test]
     fn test_encode_decode_with_random_vectors() {
         // 128KiB
-        let data_size = 1024 * 128;
+        let data_size = 1024 * 1024;
         let original_data = rand::rng().random_iter().take(data_size).collect::<Vec<_>>();
 
-        let chunk_count = 10;
+        let chunk_count = 5;
 
-        println!(
-            "Data size: {} bytes ({}KiB), chunk count: {}",
-            data_size,
-            data_size / 1024,
-            chunk_count
-        );
+        println!("Data size: {}KiB, chunk count: {}", data_size / 1024, chunk_count);
 
         let encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
+        println!("Chunk size: {}", encoder.chunk_size());
 
         let mut coded_packets = Vec::with_capacity(chunk_count);
 
