@@ -26,7 +26,7 @@ mod tests {
         let data_size = 1024 * 1024;
         let original_data = rand::rng().random_iter().take(data_size).collect::<Vec<_>>();
 
-        let chunk_count = 20;
+        let chunk_count = 5;
 
         println!("Data size: {}KiB, chunk count: {}", data_size / 1024, chunk_count);
 

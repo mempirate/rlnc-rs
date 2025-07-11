@@ -86,11 +86,18 @@ impl Encoder {
     /// the number of threads.
     #[cfg(feature = "parallel")]
     fn should_parallelize(&self) -> bool {
-        let min_chunks = rayon::current_num_threads();
-        // Work unit size: 32KiB
-        let min_bytes_per_chunk = 1024 * 32;
+        // Min total work: 512KiB
+        let min_total_work = 1024 * 512;
+        // Min chunks: 2
+        let min_chunks = 2;
+        // Min work unit: 128KiB
+        let min_work_unit = 1024 * 128;
 
-        self.chunk_count >= min_chunks && self.chunk_size >= min_bytes_per_chunk
+        let total_work = self.chunk_count * self.chunk_size;
+
+        total_work >= min_total_work &&
+            self.chunk_size >= min_work_unit &&
+            self.chunk_count >= min_chunks
     }
 
     /// Encodes the data with the given coding vector using linear combinations.
@@ -136,7 +143,6 @@ impl Encoder {
             use rayon::prelude::*;
 
             if !self.should_parallelize() {
-                // println!("sequential");
                 self.encode_inner(coding_vector)
             } else {
                 // Map each (chunk, coefficient) pair to its contribution and then reduce all
