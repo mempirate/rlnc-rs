@@ -1,7 +1,15 @@
 # Cryptographic Security
 
-RLNC is great, but it's not deployable in adversarial networks as-is. [Pollution attacks](https://en.wikipedia.org/wiki/Homomorphic_signatures_for_network_coding) are extremely destructive, and can cause the network to fail to reconstruct the original data. Therefore, we need to add some form of authentication and integrity protection to the packets, which is the challenging part.
+In RLNC, data is mutable, and can be combined and mutated in various ways. As long as these mutations are valid, receivers will be able to decode the original messages. But as soon as some invalid, bogus data is injected, receivers
+may be unable to decode anything. These kinds of attacks are called [pollution attacks](https://en.wikipedia.org/wiki/Homomorphic_signatures_for_network_coding). Usually, message authentication
+and integrity mechanisms would be deployed here, such as MACs or digital signatures over message digests.
+But because data in RLNC is mutable, static message authentication mechanisms won't work. Any sort of message tag (MAC, signature, digest), should survive
+valid linear combinations of the data.
 
+## Additive Homomorphism
+The property we're looking for is additive homomorphism.
+
+## OLD
 The general flow would work like this:
 - Source node has known public key
 - Source node divides data into chunks and commits to them (using signature)

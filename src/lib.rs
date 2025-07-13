@@ -3,6 +3,7 @@
 //! This library provides an implementation of Random Linear Network Coding (RLNC)
 //! using BLS12-381 scalar arithmetic.
 
+pub mod commit;
 mod common;
 pub mod decode;
 pub mod encode;
@@ -11,8 +12,11 @@ pub mod primitives;
 
 #[cfg(test)]
 mod tests {
+    use blstrs::G1Projective;
     use rand::Rng;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
+
+    use crate::commit::{Committer, PedersenCommitter};
 
     use super::{
         decode::Decoder,
@@ -57,6 +61,52 @@ mod tests {
         println!("Decoded length: {}", decoded.len());
         println!("Original length: {}", original_data.len());
         assert!(decoded.starts_with(&original_data));
+    }
+
+    #[test]
+    fn test_simple_commit_and_verify() {
+        let seed = [0u8; 32];
+
+        let data = rand::rng().random_iter().take(1024 * 512).collect::<Vec<_>>();
+        let chunk_count = 10;
+
+        let chunks = SecureEncoder::prepare(&data, chunk_count).unwrap();
+        let start = Instant::now();
+        let committer = PedersenCommitter::new(seed, chunks[0].symbols().len());
+        println!("Committer creation time: {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let commitments = chunks.iter().map(|c| committer.commit(c.symbols())).collect::<Vec<_>>();
+        println!("Commitment time: {:?}", start.elapsed());
+
+        let encoder = SecureEncoder::from_chunks(chunks);
+        let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
+
+        let mut coded_packets =
+            (0..chunk_count).map(|_| encoder.encode(rand::rng()).unwrap()).collect::<Vec<_>>();
+
+        let mut verify_time = Duration::ZERO;
+
+        let decoded = loop {
+            let next = coded_packets.pop().unwrap();
+            // Verify:
+            // 1. MSM commitments with coefficients
+            // 2. Recompute commitment over encoded data
+            // 3. Compare
+            let start = Instant::now();
+            let msm = G1Projective::multi_exp(&commitments, &next.coding_vector);
+            let com = committer.commit(&next.data);
+            verify_time += start.elapsed();
+
+            assert_eq!(msm, com);
+            if let Some(decoded) = decoder.decode(next).unwrap() {
+                break decoded;
+            }
+        };
+
+        println!("Total verification time: {verify_time:?}");
+
+        assert!(decoded.starts_with(&data));
     }
 
     #[test]

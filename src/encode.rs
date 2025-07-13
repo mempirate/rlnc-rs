@@ -21,6 +21,18 @@ pub trait Encoder {
     /// Error type.
     type Error;
 
+    /// Prepares the data for encoding. Divides the data into equally sized chunks, using padding
+    /// where necessary. Each chunk is converted into a vector of symbols and returned in
+    /// [`Chunk`]s.
+    fn prepare(
+        data: impl AsRef<[u8]>,
+        chunk_count: usize,
+    ) -> Result<Vec<Chunk<Self::Symbol>>, RLNCError>;
+
+    /// Creates a new encoder from the given chunks. These chunks should be prepared with
+    /// [`Self::prepare`].
+    fn from_chunks(chunks: Vec<Chunk<Self::Symbol>>) -> Self;
+
     /// Returns the chunk count.
     fn chunk_count(&self) -> usize;
 
@@ -64,20 +76,95 @@ pub trait Encoder {
     fn encode<R: Rng>(&self, rng: R) -> Result<Self::Codeword, Self::Error>;
 }
 
-/// An RLNC encoder that commits to original data chunks before encoding.
+/// An RLNC encoder that commits to original data chunks with non-hiding Pedersen commitments before
+/// encoding. It uses [`PedersenCommitter`] to commit to the data chunks.
 #[derive(Debug)]
 pub struct SecureEncoder {
     // The chunks of data to be encoded.
-    chunks: Vec<Chunk>,
+    chunks: Vec<Chunk<Scalar>>,
     // The number of chunks to split the data into (also known as the generation size).
     chunk_count: usize,
     // The size of each chunk in bytes.
     chunk_size: usize,
 }
 
+impl SecureEncoder {
+    /// Creates a new encoder for the given data and chunk count.
+    ///
+    /// # Arguments
+    ///
+    /// - `data` - The data to be encoded.
+    /// - `chunk_count` - The number of chunks to split the data into (also known as the generation
+    ///   size).
+    pub fn new(data: impl AsRef<[u8]>, chunk_count: usize) -> Result<Self, RLNCError> {
+        if data.as_ref().is_empty() {
+            return Err(RLNCError::EmptyData);
+        }
+
+        if chunk_count == 0 {
+            return Err(RLNCError::ZeroChunkCount);
+        }
+
+        let mut data = Vec::from(data.as_ref());
+        data.push(BOUNDARY_MARKER);
+
+        // Calculate chunk size to accommodate original data + boundary marker
+        let chunk_size = data.len().div_ceil(chunk_count);
+
+        // Round up chunk size to nearest multiple of `SAFE_BYTES_PER_SCALAR` for scalar packing
+        let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
+        let padded_len = chunk_size * chunk_count;
+
+        // Pad the rest with zeros if needed
+        data.resize(padded_len, 0);
+
+        let chunks = data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect();
+
+        Ok(Self { chunks, chunk_count, chunk_size })
+    }
+
+    /// Returns true if the encoder should parallelize the encoding process.
+    ///
+    /// This is determined by the chunk count (collection size), chunk size (work unit size), and
+    /// the number of threads.
+    #[cfg(feature = "parallel")]
+    fn should_parallelize(&self) -> bool {
+        // Min total work: 512KiB
+        let min_total_work = 1024 * 512;
+        // Min chunks: 2
+        let min_chunks = 2;
+        // Min work unit: 128KiB
+        let min_work_unit = 1024 * 128;
+
+        let total_work = self.chunk_count * self.chunk_size;
+
+        total_work >= min_total_work &&
+            self.chunk_size >= min_work_unit &&
+            self.chunk_count >= min_chunks
+    }
+
+    /// Sequentially encodes the data with the given coding vector using linear combinations.
+    fn encode_inner(&self, coding_vector: &[Scalar]) -> Vec<Scalar> {
+        let mut result = vec![Scalar::ZERO; self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
+
+        for (chunk, &coefficient) in self.chunks.iter().zip(coding_vector) {
+            if coefficient.is_zero_vartime() {
+                continue;
+            }
+
+            for (i, symbol) in chunk.symbols().iter().enumerate() {
+                result[i] += symbol * coefficient;
+            }
+        }
+
+        result
+    }
+}
+
 impl Encoder for SecureEncoder {
     type Codeword = RLNCPacket;
     type Symbol = Scalar;
+
     type Error = RLNCError;
 
     fn chunk_count(&self) -> usize {
@@ -86,6 +173,41 @@ impl Encoder for SecureEncoder {
 
     fn chunk_size(&self) -> usize {
         self.chunk_size
+    }
+
+    fn prepare(
+        data: impl AsRef<[u8]>,
+        chunk_count: usize,
+    ) -> Result<Vec<Chunk<Scalar>>, RLNCError> {
+        if data.as_ref().is_empty() {
+            return Err(RLNCError::EmptyData);
+        }
+
+        if chunk_count == 0 {
+            return Err(RLNCError::ZeroChunkCount);
+        }
+
+        let mut data = Vec::from(data.as_ref());
+        data.push(BOUNDARY_MARKER);
+
+        // Calculate chunk size to accommodate original data + boundary marker
+        let chunk_size = data.len().div_ceil(chunk_count);
+
+        // Round up chunk size to nearest multiple of `SAFE_BYTES_PER_SCALAR` for scalar packing
+        let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
+        let padded_len = chunk_size * chunk_count;
+
+        // Pad the rest with zeros if needed
+        data.resize(padded_len, 0);
+
+        Ok(data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect())
+    }
+
+    fn from_chunks(chunks: Vec<Chunk<Self::Symbol>>) -> Self {
+        let chunk_count = chunks.len();
+        let chunk_size = chunks[0].size();
+
+        Self { chunks, chunk_count, chunk_size }
     }
 
     /// Encodes the data with the given coding vector using linear combinations.
@@ -180,89 +302,6 @@ impl Encoder for SecureEncoder {
             .collect();
 
         self.encode_with_vector(&coding_vector)
-    }
-}
-
-impl SecureEncoder {
-    /// Creates a new encoder for the given data and chunk count.
-    ///
-    /// # Arguments
-    ///
-    /// - `data` - The data to be encoded.
-    /// - `chunk_count` - The number of chunks to split the data into (also known as the generation
-    ///   size).
-    pub fn new(data: impl AsRef<[u8]>, chunk_count: usize) -> Result<Self, RLNCError> {
-        if data.as_ref().is_empty() {
-            return Err(RLNCError::EmptyData);
-        }
-
-        if chunk_count == 0 {
-            return Err(RLNCError::ZeroChunkCount);
-        }
-
-        let mut data = Vec::from(data.as_ref());
-        data.push(BOUNDARY_MARKER);
-
-        // Calculate chunk size to accommodate original data + boundary marker
-        let chunk_size = data.len().div_ceil(chunk_count);
-
-        // Round up chunk size to nearest multiple of `SAFE_BYTES_PER_SCALAR` for scalar packing
-        let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
-        let padded_len = chunk_size * chunk_count;
-
-        // Pad the rest with zeros if needed
-        data.resize(padded_len, 0);
-
-        let chunks = data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect();
-
-        Ok(Self { chunks, chunk_count, chunk_size })
-    }
-
-    /// Returns the number of chunks the data was split into.
-    pub fn chunk_count(&self) -> usize {
-        self.chunk_count
-    }
-
-    /// Returns the size of each chunk in bytes.
-    pub fn chunk_size(&self) -> usize {
-        self.chunk_size
-    }
-
-    /// Returns true if the encoder should parallelize the encoding process.
-    ///
-    /// This is determined by the chunk count (collection size), chunk size (work unit size), and
-    /// the number of threads.
-    #[cfg(feature = "parallel")]
-    fn should_parallelize(&self) -> bool {
-        // Min total work: 512KiB
-        let min_total_work = 1024 * 512;
-        // Min chunks: 2
-        let min_chunks = 2;
-        // Min work unit: 128KiB
-        let min_work_unit = 1024 * 128;
-
-        let total_work = self.chunk_count * self.chunk_size;
-
-        total_work >= min_total_work &&
-            self.chunk_size >= min_work_unit &&
-            self.chunk_count >= min_chunks
-    }
-
-    /// Sequentially encodes the data with the given coding vector using linear combinations.
-    fn encode_inner(&self, coding_vector: &[Scalar]) -> Vec<Scalar> {
-        let mut result = vec![Scalar::ZERO; self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
-
-        for (chunk, &coefficient) in self.chunks.iter().zip(coding_vector) {
-            if coefficient.is_zero_vartime() {
-                continue;
-            }
-
-            for (i, symbol) in chunk.symbols().iter().enumerate() {
-                result[i] += symbol * coefficient;
-            }
-        }
-
-        result
     }
 }
 
