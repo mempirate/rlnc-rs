@@ -1,18 +1,9 @@
 //! This module implements non-hiding Pedersen commitments.
 use blstrs::{G1Projective, Scalar};
-use group::ff::Field;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 /// The domain separation tag for the Pedersen commitment scheme.
 const DST: &[u8] = b"RLNC_PEDERSEN_GEN";
-
-pub trait Committer {
-    type Commitment;
-    type Symbol: Field;
-
-    /// Commits to the given symbols using the committer's generators.
-    fn commit(&self, symbols: &[Self::Symbol]) -> Self::Commitment;
-}
 
 /// A committer that uses the non-hiding Pedersen commitment scheme.
 ///
@@ -60,13 +51,9 @@ impl PedersenCommitter {
 
         Self { generators }
     }
-}
 
-impl Committer for PedersenCommitter {
-    type Commitment = G1Projective;
-    type Symbol = Scalar;
-
-    fn commit(&self, symbols: &[Scalar]) -> G1Projective {
+    /// Commits to the symbols using the committer's generators.
+    pub fn commit(&self, symbols: &[Scalar]) -> G1Projective {
         assert_eq!(symbols.len(), self.generators.len());
 
         G1Projective::multi_exp(&self.generators, symbols)

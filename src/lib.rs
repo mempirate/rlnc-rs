@@ -16,11 +16,11 @@ mod tests {
     use rand::Rng;
     use std::time::{Duration, Instant};
 
-    use crate::commit::{Committer, PedersenCommitter};
+    use crate::commit::PedersenCommitter;
 
     use super::{
         decode::Decoder,
-        encode::{Encoder, SecureEncoder},
+        encode::Encoder,
         primitives::field::{Field, Scalar},
     };
 
@@ -34,7 +34,7 @@ mod tests {
 
         println!("Data size: {}KiB, chunk count: {}", data_size / 1024, chunk_count);
 
-        let encoder = SecureEncoder::new(original_data.clone(), chunk_count).unwrap();
+        let encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
         println!("Chunk size: {}", encoder.chunk_size());
 
         let mut coded_packets = Vec::with_capacity(chunk_count);
@@ -70,7 +70,7 @@ mod tests {
         let data = rand::rng().random_iter().take(1024 * 512).collect::<Vec<_>>();
         let chunk_count = 10;
 
-        let chunks = SecureEncoder::prepare(&data, chunk_count).unwrap();
+        let chunks = Encoder::prepare(&data, chunk_count).unwrap();
         let start = Instant::now();
         let committer = PedersenCommitter::new(seed, chunks[0].symbols().len());
         println!("Committer creation time: {:?}", start.elapsed());
@@ -79,7 +79,7 @@ mod tests {
         let commitments = chunks.iter().map(|c| committer.commit(c.symbols())).collect::<Vec<_>>();
         println!("Commitment time: {:?}", start.elapsed());
 
-        let encoder = SecureEncoder::from_chunks(chunks);
+        let encoder = Encoder::from_chunks(chunks);
         let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
 
         let mut coded_packets =
@@ -114,7 +114,7 @@ mod tests {
         let original_data = b"A";
         let chunk_count = 1;
 
-        let encoder = SecureEncoder::new(original_data, chunk_count).unwrap();
+        let encoder = Encoder::new(original_data, chunk_count).unwrap();
         let packet = encoder.encode_with_vector(&[Scalar::ONE]).unwrap();
 
         let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();

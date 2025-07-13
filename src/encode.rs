@@ -10,76 +10,10 @@ use crate::{
     },
 };
 
-/// RLNC encoder trait.
-pub trait Encoder {
-    /// The type of the coded data.
-    type Codeword;
-    /// The type of the symbol used in this encoder. The original data
-    /// will be converted to symbols, and the random coding vector will also
-    /// be of this type.
-    type Symbol: group::ff::Field;
-    /// Error type.
-    type Error;
-
-    /// Prepares the data for encoding. Divides the data into equally sized chunks, using padding
-    /// where necessary. Each chunk is converted into a vector of symbols and returned in
-    /// [`Chunk`]s.
-    fn prepare(
-        data: impl AsRef<[u8]>,
-        chunk_count: usize,
-    ) -> Result<Vec<Chunk<Self::Symbol>>, RLNCError>;
-
-    /// Creates a new encoder from the given chunks. These chunks should be prepared with
-    /// [`Self::prepare`].
-    fn from_chunks(chunks: Vec<Chunk<Self::Symbol>>) -> Self;
-
-    /// Returns the chunk count.
-    fn chunk_count(&self) -> usize;
-
-    /// Returns the chunk size.
-    fn chunk_size(&self) -> usize;
-
-    /// Encodes the data with the given coding vector using linear combinations.
-    ///
-    /// This method computes a coded packet by taking a linear combination of all chunks
-    /// using the coefficients from the coding vector. The operation is performed in
-    /// the field of BLS12-381.
-    ///
-    /// # Mathematical Representation
-    ///
-    /// Given original chunks X₁, X₂, ..., Xₖ and coding vector coefficients c₁, c₂, ..., cₖ,
-    /// the coded packet Y is computed as:
-    ///
-    /// ```text
-    /// Y = c₁ ⊗ X₁ ⊕ c₂ ⊗ X₂ ⊕ ... ⊕ cₖ ⊗ Xₖ
-    /// ```
-    ///
-    /// Where:
-    /// - ⊗ denotes multiplication in the field of BLS12-381
-    /// - ⊕ denotes addition in the field of BLS12-381
-    /// - k is the chunk count (generation size)
-    ///
-    /// Each byte position j in the coded packet is computed as:
-    /// ```text
-    /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod p)
-    /// ```
-    ///
-    /// # Algorithm Complexity
-    /// O(k * n) where k is the chunk count and n is the chunk size.
-    /// ```
-    fn encode_with_vector(
-        &self,
-        coding_vector: &[Self::Symbol],
-    ) -> Result<Self::Codeword, Self::Error>;
-
-    /// Encodes the data with a random coding vector, using the provided random number generator.
-    fn encode<R: Rng>(&self, rng: R) -> Result<Self::Codeword, Self::Error>;
-}
-
 /// An RLNC encoder that commits to original data chunks with non-hiding Pedersen commitments before
 /// encoding. It uses [`PedersenCommitter`] to commit to the data chunks.
 #[derive(Debug)]
-pub struct SecureEncoder {
+pub struct Encoder {
     // The chunks of data to be encoded.
     chunks: Vec<Chunk<Scalar>>,
     // The number of chunks to split the data into (also known as the generation size).
@@ -88,7 +22,7 @@ pub struct SecureEncoder {
     chunk_size: usize,
 }
 
-impl SecureEncoder {
+impl Encoder {
     /// Creates a new encoder for the given data and chunk count.
     ///
     /// # Arguments
@@ -159,23 +93,20 @@ impl SecureEncoder {
 
         result
     }
-}
 
-impl Encoder for SecureEncoder {
-    type Codeword = RLNCPacket;
-    type Symbol = Scalar;
-
-    type Error = RLNCError;
-
-    fn chunk_count(&self) -> usize {
+    /// Returns the number of chunks in the encoder.
+    pub fn chunk_count(&self) -> usize {
         self.chunk_count
     }
 
-    fn chunk_size(&self) -> usize {
+    /// Returns the size of each chunk in the encoder.
+    pub fn chunk_size(&self) -> usize {
         self.chunk_size
     }
 
-    fn prepare(
+    /// Prepares the data for encoding by splitting it into equally sized chunks and padding with
+    /// zeros. Also converts the data into symbols in the chosen finite field.
+    pub fn prepare(
         data: impl AsRef<[u8]>,
         chunk_count: usize,
     ) -> Result<Vec<Chunk<Scalar>>, RLNCError> {
@@ -203,7 +134,8 @@ impl Encoder for SecureEncoder {
         Ok(data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect())
     }
 
-    fn from_chunks(chunks: Vec<Chunk<Self::Symbol>>) -> Self {
+    /// Creates a new encoder from a vector of chunks.
+    pub fn from_chunks(chunks: Vec<Chunk<Scalar>>) -> Self {
         let chunk_count = chunks.len();
         let chunk_size = chunks[0].size();
 
@@ -238,7 +170,7 @@ impl Encoder for SecureEncoder {
     /// # Algorithm Complexity
     /// O(k * n) where k is the chunk count and n is the chunk size.
     /// ```
-    fn encode_with_vector(&self, coding_vector: &[Scalar]) -> Result<RLNCPacket, RLNCError> {
+    pub fn encode_with_vector(&self, coding_vector: &[Scalar]) -> Result<RLNCPacket, RLNCError> {
         if coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
         }
@@ -292,7 +224,7 @@ impl Encoder for SecureEncoder {
     }
 
     /// Encodes the data with a random coding vector, using the provided random number generator.
-    fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
+    pub fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
         let coding_vector: Vec<Scalar> = (0..self.chunk_count)
             .map(|_| {
                 let mut bytes = [0u8; 32];
@@ -314,7 +246,7 @@ mod tests {
         let data = b"Hello, world!";
         let chunk_count = 3;
 
-        let encoder = SecureEncoder::new(data, chunk_count).unwrap();
+        let encoder = Encoder::new(data, chunk_count).unwrap();
         println!("{:?}", encoder);
 
         let packet = encoder.encode(rand::rng()).unwrap();
