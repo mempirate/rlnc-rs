@@ -16,7 +16,7 @@ mod tests {
 
     use super::{
         decode::Decoder,
-        encode::Encoder,
+        encode::{Encoder, SecureEncoder},
         primitives::field::{Field, Scalar},
     };
 
@@ -30,7 +30,7 @@ mod tests {
 
         println!("Data size: {}KiB, chunk count: {}", data_size / 1024, chunk_count);
 
-        let encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
+        let encoder = SecureEncoder::new(original_data.clone(), chunk_count).unwrap();
         println!("Chunk size: {}", encoder.chunk_size());
 
         let mut coded_packets = Vec::with_capacity(chunk_count);
@@ -64,7 +64,7 @@ mod tests {
         let original_data = b"A";
         let chunk_count = 1;
 
-        let encoder = Encoder::new(original_data, chunk_count).unwrap();
+        let encoder = SecureEncoder::new(original_data, chunk_count).unwrap();
         let packet = encoder.encode_with_vector(&[Scalar::ONE]).unwrap();
 
         let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();

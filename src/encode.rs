@@ -10,23 +10,63 @@ use crate::{
     },
 };
 
-/// Helper function that encodes the data into `chunk_count` packets with random coding vectors, and
-/// returns a vector of encoded packets.
-pub fn encode(data: &[u8], chunk_count: usize) -> Result<Vec<RLNCPacket>, RLNCError> {
-    let encoder = Encoder::new(data, chunk_count)?;
+/// RLNC encoder trait.
+pub trait Encoder {
+    /// The type of the coded data.
+    type Codeword;
+    /// The type of the symbol used in this encoder. The original data
+    /// will be converted to symbols, and the random coding vector will also
+    /// be of this type.
+    type Symbol: group::ff::Field;
+    /// Error type.
+    type Error;
 
-    let mut rng = rand::rng();
-    let mut packets = Vec::with_capacity(chunk_count);
-    for _ in 0..chunk_count {
-        packets.push(encoder.encode(&mut rng)?);
-    }
+    /// Returns the chunk count.
+    fn chunk_count(&self) -> usize;
 
-    Ok(packets)
+    /// Returns the chunk size.
+    fn chunk_size(&self) -> usize;
+
+    /// Encodes the data with the given coding vector using linear combinations.
+    ///
+    /// This method computes a coded packet by taking a linear combination of all chunks
+    /// using the coefficients from the coding vector. The operation is performed in
+    /// the field of BLS12-381.
+    ///
+    /// # Mathematical Representation
+    ///
+    /// Given original chunks X₁, X₂, ..., Xₖ and coding vector coefficients c₁, c₂, ..., cₖ,
+    /// the coded packet Y is computed as:
+    ///
+    /// ```text
+    /// Y = c₁ ⊗ X₁ ⊕ c₂ ⊗ X₂ ⊕ ... ⊕ cₖ ⊗ Xₖ
+    /// ```
+    ///
+    /// Where:
+    /// - ⊗ denotes multiplication in the field of BLS12-381
+    /// - ⊕ denotes addition in the field of BLS12-381
+    /// - k is the chunk count (generation size)
+    ///
+    /// Each byte position j in the coded packet is computed as:
+    /// ```text
+    /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod p)
+    /// ```
+    ///
+    /// # Algorithm Complexity
+    /// O(k * n) where k is the chunk count and n is the chunk size.
+    /// ```
+    fn encode_with_vector(
+        &self,
+        coding_vector: &[Self::Symbol],
+    ) -> Result<Self::Codeword, Self::Error>;
+
+    /// Encodes the data with a random coding vector, using the provided random number generator.
+    fn encode<R: Rng>(&self, rng: R) -> Result<Self::Codeword, Self::Error>;
 }
 
-/// RLNC Encoder.
+/// An RLNC encoder that commits to original data chunks before encoding.
 #[derive(Debug)]
-pub struct Encoder {
+pub struct SecureEncoder {
     // The chunks of data to be encoded.
     chunks: Vec<Chunk>,
     // The number of chunks to split the data into (also known as the generation size).
@@ -35,7 +75,115 @@ pub struct Encoder {
     chunk_size: usize,
 }
 
-impl Encoder {
+impl Encoder for SecureEncoder {
+    type Codeword = RLNCPacket;
+    type Symbol = Scalar;
+    type Error = RLNCError;
+
+    fn chunk_count(&self) -> usize {
+        self.chunk_count
+    }
+
+    fn chunk_size(&self) -> usize {
+        self.chunk_size
+    }
+
+    /// Encodes the data with the given coding vector using linear combinations.
+    ///
+    /// This method computes a coded packet by taking a linear combination of all chunks
+    /// using the coefficients from the coding vector. The operation is performed in
+    /// the field of BLS12-381.
+    ///
+    /// # Mathematical Representation
+    ///
+    /// Given original chunks X₁, X₂, ..., Xₖ and coding vector coefficients c₁, c₂, ..., cₖ,
+    /// the coded packet Y is computed as:
+    ///
+    /// ```text
+    /// Y = c₁ ⊗ X₁ ⊕ c₂ ⊗ X₂ ⊕ ... ⊕ cₖ ⊗ Xₖ
+    /// ```
+    ///
+    /// Where:
+    /// - ⊗ denotes multiplication in the field of BLS12-381
+    /// - ⊕ denotes addition in the field of BLS12-381
+    /// - k is the chunk count (generation size)
+    ///
+    /// Each byte position j in the coded packet is computed as:
+    /// ```text
+    /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod p)
+    /// ```
+    ///
+    /// # Algorithm Complexity
+    /// O(k * n) where k is the chunk count and n is the chunk size.
+    /// ```
+    fn encode_with_vector(&self, coding_vector: &[Scalar]) -> Result<RLNCPacket, RLNCError> {
+        if coding_vector.len() != self.chunk_count {
+            return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
+        }
+
+        let symbol_count = self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
+
+        // Compute the encoded result either sequentially or in parallel, depending on the
+        // enabled feature flag. We avoid sharing mutable state across threads by letting each
+        // worker produce a partial vector and then combining (reducing) the partial results.
+        #[cfg(feature = "parallel")]
+        let result = {
+            use rayon::prelude::*;
+
+            if !self.should_parallelize() {
+                self.encode_inner(coding_vector)
+            } else {
+                // Map each (chunk, coefficient) pair to its contribution and then reduce all
+                // contributions into the final result.
+                self.chunks
+                    .par_iter()
+                    .zip(coding_vector)
+                    .filter_map(|(chunk, &coefficient)| {
+                        // Skip the work if the coefficient is zero.
+                        if coefficient.is_zero_vartime() {
+                            return None;
+                        }
+
+                        let mut acc = Vec::with_capacity(symbol_count);
+
+                        for symbol in chunk.symbols().iter() {
+                            acc.push(*symbol * coefficient);
+                        }
+
+                        Some(acc)
+                    })
+                    .reduce(
+                        || vec![Scalar::ZERO; symbol_count],
+                        |mut a, b| {
+                            // Element-wise addition of two partial results.
+                            a.iter_mut().zip(b).for_each(|(x, y)| *x += y);
+                            a
+                        },
+                    )
+            }
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let result = self.encode_inner(coding_vector);
+
+        Ok(RLNCPacket { coding_vector: coding_vector.to_vec(), data: result })
+    }
+
+    /// Encodes the data with a random coding vector, using the provided random number generator.
+    fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
+        let coding_vector: Vec<Scalar> = (0..self.chunk_count)
+            .map(|_| {
+                let mut bytes = [0u8; 32];
+                rng.fill(&mut bytes[..SAFE_BYTES_PER_SCALAR]);
+                Scalar::from_bytes_le(&bytes).unwrap()
+            })
+            .collect();
+
+        self.encode_with_vector(&coding_vector)
+    }
+}
+
+impl SecureEncoder {
     /// Creates a new encoder for the given data and chunk count.
     ///
     /// # Arguments
@@ -100,87 +248,6 @@ impl Encoder {
             self.chunk_count >= min_chunks
     }
 
-    /// Encodes the data with the given coding vector using linear combinations.
-    ///
-    /// This method computes a coded packet by taking a linear combination of all chunks
-    /// using the coefficients from the coding vector. The operation is performed in
-    /// the field of BLS12-381.
-    ///
-    /// # Mathematical Representation
-    ///
-    /// Given original chunks X₁, X₂, ..., Xₖ and coding vector coefficients c₁, c₂, ..., cₖ,
-    /// the coded packet Y is computed as:
-    ///
-    /// ```text
-    /// Y = c₁ ⊗ X₁ ⊕ c₂ ⊗ X₂ ⊕ ... ⊕ cₖ ⊗ Xₖ
-    /// ```
-    ///
-    /// Where:
-    /// - ⊗ denotes multiplication in the field of BLS12-381
-    /// - ⊕ denotes addition in the field of BLS12-381
-    /// - k is the chunk count (generation size)
-    ///
-    /// Each byte position j in the coded packet is computed as:
-    /// ```text
-    /// Y[j] = Σᵢ₌₁ᵏ (cᵢ ⊗ Xᵢ[j])  (mod p)
-    /// ```
-    ///
-    /// # Algorithm Complexity
-    /// O(k * n) where k is the chunk count and n is the chunk size.
-    /// ```
-    pub fn encode_with_vector(&self, coding_vector: &[Scalar]) -> Result<RLNCPacket, RLNCError> {
-        if coding_vector.len() != self.chunk_count {
-            return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
-        }
-
-        let symbol_count = self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
-
-        // Compute the encoded result either sequentially or in parallel, depending on the
-        // enabled feature flag. We avoid sharing mutable state across threads by letting each
-        // worker produce a partial vector and then combining (reducing) the partial results.
-        #[cfg(feature = "parallel")]
-        let result = {
-            use rayon::prelude::*;
-
-            if !self.should_parallelize() {
-                self.encode_inner(coding_vector)
-            } else {
-                // Map each (chunk, coefficient) pair to its contribution and then reduce all
-                // contributions into the final result.
-                self.chunks
-                    .par_iter()
-                    .zip(coding_vector)
-                    .filter_map(|(chunk, &coefficient)| {
-                        // Skip the work if the coefficient is zero.
-                        if coefficient.is_zero_vartime() {
-                            return None;
-                        }
-
-                        let mut acc = Vec::with_capacity(symbol_count);
-
-                        for symbol in chunk.symbols().iter() {
-                            acc.push(*symbol * coefficient);
-                        }
-
-                        Some(acc)
-                    })
-                    .reduce(
-                        || vec![Scalar::ZERO; symbol_count],
-                        |mut a, b| {
-                            // Element-wise addition of two partial results.
-                            a.iter_mut().zip(b).for_each(|(x, y)| *x += y);
-                            a
-                        },
-                    )
-            }
-        };
-
-        #[cfg(not(feature = "parallel"))]
-        let result = self.encode_inner(coding_vector);
-
-        Ok(RLNCPacket { coding_vector: coding_vector.to_vec(), data: result })
-    }
-
     /// Sequentially encodes the data with the given coding vector using linear combinations.
     fn encode_inner(&self, coding_vector: &[Scalar]) -> Vec<Scalar> {
         let mut result = vec![Scalar::ZERO; self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
@@ -197,19 +264,6 @@ impl Encoder {
 
         result
     }
-
-    /// Encodes the data with a random coding vector, using the provided random number generator.
-    pub fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
-        let coding_vector: Vec<Scalar> = (0..self.chunk_count)
-            .map(|_| {
-                let mut bytes = [0u8; 32];
-                rng.fill(&mut bytes[..SAFE_BYTES_PER_SCALAR]);
-                Scalar::from_bytes_le(&bytes).unwrap()
-            })
-            .collect();
-
-        self.encode_with_vector(&coding_vector)
-    }
 }
 
 #[cfg(test)]
@@ -221,7 +275,7 @@ mod tests {
         let data = b"Hello, world!";
         let chunk_count = 3;
 
-        let encoder = Encoder::new(data, chunk_count).unwrap();
+        let encoder = SecureEncoder::new(data, chunk_count).unwrap();
         println!("{:?}", encoder);
 
         let packet = encoder.encode(rand::rng()).unwrap();
