@@ -1,39 +1,24 @@
 use crate::{
-    common::{RLNCError, SAFE_BYTES_PER_SCALAR},
-    primitives::{
-        field::{Field, Scalar},
-        packet::RLNCPacket,
-    },
+    common::RLNCError,
+    primitives::{field::Field, packet::RLNCPacket},
 };
 
 /// A RREF matrix of coded packets, used to store the received coded packets and perform online
 /// Gaussian elimination. To perform elimination efficiently, we store the pivots in a separate
 /// array.
 #[derive(Debug)]
-pub(crate) struct Matrix {
+pub(crate) struct Matrix<F: Field> {
     /// The number of original chunks (capacity of the matrix).
     chunk_count: usize,
     /// The received coded packets.
-    data: Vec<RLNCPacket>,
+    data: Vec<RLNCPacket<F>>,
     /// Maps pivot column index to row index. Array index is column index, value is row index.
     pivots: Vec<Option<usize>>,
     /// The number of linearly independent coded packets received (= rank of the matrix).
     rank: usize,
 }
 
-pub(crate) fn scalars_to_bytes(scalars: &[Scalar]) -> Vec<u8> {
-    // Extract bytes from scalars - we stored 31 bytes per scalar
-    scalars
-        .iter()
-        .flat_map(|scalar| {
-            let bytes = scalar.to_bytes_le();
-            // Return only the first 31 bytes (as we stored them)
-            bytes[..SAFE_BYTES_PER_SCALAR].to_vec()
-        })
-        .collect()
-}
-
-impl Matrix {
+impl<F: Field> Matrix<F> {
     /// Creates a new matrix with the given chunk count.
     pub(crate) fn new(chunk_count: usize) -> Self {
         Self {
@@ -50,8 +35,8 @@ impl Matrix {
             return Err(RLNCError::NotEnoughPackets(self.rank, self.chunk_count));
         }
 
-        let scalars_per_chunk = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
-        let mut chunk_scalars = vec![vec![Scalar::ZERO; scalars_per_chunk]; self.chunk_count];
+        let symbols_per_chunk = chunk_size.div_ceil(F::SAFE_CAPACITY);
+        let mut chunk_symbols = vec![vec![F::ZERO; symbols_per_chunk]; self.chunk_count];
 
         // Extract packed scalars from pivot rows (they're already normalized)
         for (col, row_idx) in self
@@ -63,13 +48,13 @@ impl Matrix {
         {
             let row = &self.data[row_idx];
             // Copy the packed scalars directly
-            chunk_scalars[col].copy_from_slice(&row.data);
+            chunk_symbols[col].copy_from_slice(&row.data);
         }
 
         // Convert packed scalars back to bytes
         let mut decoded = Vec::with_capacity(chunk_size * self.chunk_count);
-        for chunk in chunk_scalars {
-            let chunk_bytes = scalars_to_bytes(&chunk);
+        for chunk in chunk_symbols {
+            let chunk_bytes = chunk.iter().flat_map(|s| s.to_bytes()).collect::<Vec<_>>();
             decoded.extend_from_slice(&chunk_bytes);
         }
 
@@ -84,7 +69,7 @@ impl Matrix {
     }
 
     /// Pushes a new packet into the matrix, which will be eliminated against the existing rows.
-    pub(crate) fn push_rref(&mut self, mut packet: RLNCPacket) -> bool {
+    pub(crate) fn push_rref(&mut self, mut packet: RLNCPacket<F>) -> bool {
         self.eliminate(&mut packet);
 
         if let Some(col) = packet.leading_coefficient() {
@@ -106,7 +91,7 @@ impl Matrix {
         false
     }
 
-    fn eliminate(&mut self, packet: &mut RLNCPacket) {
+    fn eliminate(&mut self, packet: &mut RLNCPacket<F>) {
         // Process pivots in column order (array index order)
         for (col, row) in self
             .pivots
