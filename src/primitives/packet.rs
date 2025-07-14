@@ -1,15 +1,16 @@
-use super::field::{Field, Scalar};
+//! RLNC coded packet.
+use super::field::Field;
 
 /// A coded packet.
 #[derive(Debug, Clone)]
-pub struct RLNCPacket {
+pub struct RLNCPacket<F: Field> {
     /// The coding vector (coefficients).
-    pub coding_vector: Vec<Scalar>,
+    pub coding_vector: Vec<F>,
     /// The actual data payload, containing a linear combination of the original data.
-    pub data: Vec<Scalar>,
+    pub data: Vec<F>,
 }
 
-impl RLNCPacket {
+impl<F: Field> RLNCPacket<F> {
     /// Returns the number of non-zero coefficients in the coding vector.
     pub fn degree(&self) -> usize {
         self.coding_vector.iter().filter(|&c| !c.is_zero_vartime()).count()
@@ -36,7 +37,7 @@ impl RLNCPacket {
     }
 
     /// Subtracts the `src` row from the current row in place, multiplying by `factor`.
-    pub fn subtract_row(&mut self, src: &Self, factor: Scalar) {
+    pub fn subtract_row(&mut self, src: &Self, factor: F) {
         for i in 0..self.coding_vector.len() {
             self.coding_vector[i] -= factor * src.coding_vector[i];
         }

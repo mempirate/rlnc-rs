@@ -2,7 +2,7 @@
 use rand::Rng;
 
 use crate::{
-    common::{BOUNDARY_MARKER, RLNCError, SAFE_BYTES_PER_SCALAR},
+    common::{BOUNDARY_MARKER, RLNCError},
     primitives::{
         Chunk,
         field::{Field, Scalar},
@@ -10,19 +10,18 @@ use crate::{
     },
 };
 
-/// An RLNC encoder that commits to original data chunks with non-hiding Pedersen commitments before
-/// encoding. It uses [`PedersenCommitter`] to commit to the data chunks.
+/// RLNC encoder.
 #[derive(Debug)]
-pub struct Encoder {
+pub struct Encoder<F: Field> {
     // The chunks of data to be encoded.
-    chunks: Vec<Chunk<Scalar>>,
+    chunks: Vec<Chunk<F>>,
     // The number of chunks to split the data into (also known as the generation size).
     chunk_count: usize,
     // The size of each chunk in bytes.
     chunk_size: usize,
 }
 
-impl Encoder {
+impl<F: Field> Encoder<F> {
     /// Creates a new encoder for the given data and chunk count.
     ///
     /// # Arguments
@@ -45,8 +44,8 @@ impl Encoder {
         // Calculate chunk size to accommodate original data + boundary marker
         let chunk_size = data.len().div_ceil(chunk_count);
 
-        // Round up chunk size to nearest multiple of `SAFE_BYTES_PER_SCALAR` for scalar packing
-        let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
+        // Round up chunk size to nearest multiple of `F::SAFE_CAPACITY` for scalar packing
+        let chunk_size = chunk_size.div_ceil(F::SAFE_CAPACITY) * F::SAFE_CAPACITY;
         let padded_len = chunk_size * chunk_count;
 
         // Pad the rest with zeros if needed
@@ -55,6 +54,14 @@ impl Encoder {
         let chunks = data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect();
 
         Ok(Self { chunks, chunk_count, chunk_size })
+    }
+
+    /// Creates a new encoder from a vector of chunks.
+    pub fn from_chunks(chunks: Vec<Chunk<F>>) -> Self {
+        let chunk_count = chunks.len();
+        let chunk_size = chunks[0].size();
+
+        Self { chunks, chunk_count, chunk_size }
     }
 
     /// Returns true if the encoder should parallelize the encoding process.
@@ -78,8 +85,8 @@ impl Encoder {
     }
 
     /// Sequentially encodes the data with the given coding vector using linear combinations.
-    fn encode_inner(&self, coding_vector: &[Scalar]) -> Vec<Scalar> {
-        let mut result = vec![Scalar::ZERO; self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR)];
+    fn encode_inner(&self, coding_vector: &[F]) -> Vec<F> {
+        let mut result = vec![F::ZERO; self.chunk_size.div_ceil(F::SAFE_CAPACITY)];
 
         for (chunk, &coefficient) in self.chunks.iter().zip(coding_vector) {
             if coefficient.is_zero_vartime() {
@@ -87,7 +94,7 @@ impl Encoder {
             }
 
             for (i, symbol) in chunk.symbols().iter().enumerate() {
-                result[i] += symbol * coefficient;
+                result[i] += *symbol * coefficient;
             }
         }
 
@@ -124,22 +131,14 @@ impl Encoder {
         // Calculate chunk size to accommodate original data + boundary marker
         let chunk_size = data.len().div_ceil(chunk_count);
 
-        // Round up chunk size to nearest multiple of `SAFE_BYTES_PER_SCALAR` for scalar packing
-        let chunk_size = chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR) * SAFE_BYTES_PER_SCALAR;
+        // Round up chunk size to nearest multiple of `F::SAFE_CAPACITY` for scalar packing
+        let chunk_size = chunk_size.div_ceil(F::SAFE_CAPACITY) * F::SAFE_CAPACITY;
         let padded_len = chunk_size * chunk_count;
 
         // Pad the rest with zeros if needed
         data.resize(padded_len, 0);
 
         Ok(data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect())
-    }
-
-    /// Creates a new encoder from a vector of chunks.
-    pub fn from_chunks(chunks: Vec<Chunk<Scalar>>) -> Self {
-        let chunk_count = chunks.len();
-        let chunk_size = chunks[0].size();
-
-        Self { chunks, chunk_count, chunk_size }
     }
 
     /// Encodes the data with the given coding vector using linear combinations.
@@ -170,12 +169,12 @@ impl Encoder {
     /// # Algorithm Complexity
     /// O(k * n) where k is the chunk count and n is the chunk size.
     /// ```
-    pub fn encode_with_vector(&self, coding_vector: &[Scalar]) -> Result<RLNCPacket, RLNCError> {
+    pub fn encode_with_vector(&self, coding_vector: &[F]) -> Result<RLNCPacket<F>, RLNCError> {
         if coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength(coding_vector.len(), self.chunk_count));
         }
 
-        let symbol_count = self.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR);
+        let symbol_count = self.chunk_size.div_ceil(F::SAFE_CAPACITY);
 
         // Compute the encoded result either sequentially or in parallel, depending on the
         // enabled feature flag. We avoid sharing mutable state across threads by letting each
@@ -207,7 +206,7 @@ impl Encoder {
                         Some(acc)
                     })
                     .reduce(
-                        || vec![Scalar::ZERO; symbol_count],
+                        || vec![F::ZERO; symbol_count],
                         |mut a, b| {
                             // Element-wise addition of two partial results.
                             a.iter_mut().zip(b).for_each(|(x, y)| *x += y);
@@ -224,35 +223,15 @@ impl Encoder {
     }
 
     /// Encodes the data with a random coding vector, using the provided random number generator.
-    pub fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket, RLNCError> {
-        let coding_vector: Vec<Scalar> = (0..self.chunk_count)
+    pub fn encode<R: Rng>(&self, mut rng: R) -> Result<RLNCPacket<F>, RLNCError> {
+        let coding_vector: Vec<F> = (0..self.chunk_count)
             .map(|_| {
                 let mut bytes = [0u8; 32];
-                rng.fill(&mut bytes[..SAFE_BYTES_PER_SCALAR]);
-                Scalar::from_bytes_le(&bytes).unwrap()
+                rng.fill(&mut bytes[..F::SAFE_CAPACITY]);
+                F::from_bytes(&bytes)
             })
             .collect();
 
         self.encode_with_vector(&coding_vector)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_encoder() {
-        let data = b"Hello, world!";
-        let chunk_count = 3;
-
-        let encoder = Encoder::new(data, chunk_count).unwrap();
-        println!("{:?}", encoder);
-
-        let packet = encoder.encode(rand::rng()).unwrap();
-
-        println!("{:?}", packet);
-
-        assert_eq!(packet.data.len(), encoder.chunk_size.div_ceil(SAFE_BYTES_PER_SCALAR));
     }
 }

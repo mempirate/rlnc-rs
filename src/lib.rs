@@ -13,16 +13,13 @@ pub mod primitives;
 #[cfg(test)]
 mod tests {
     use blstrs::G1Projective;
+    use group::ff::Field;
     use rand::Rng;
     use std::time::{Duration, Instant};
 
     use crate::commit::PedersenCommitter;
 
-    use super::{
-        decode::Decoder,
-        encode::Encoder,
-        primitives::field::{Field, Scalar},
-    };
+    use super::{decode::Decoder, encode::Encoder, primitives::field::Scalar};
 
     #[test]
     fn test_encode_decode_with_random_vectors() {
@@ -34,7 +31,7 @@ mod tests {
 
         println!("Data size: {}KiB, chunk count: {}", data_size / 1024, chunk_count);
 
-        let encoder = Encoder::new(original_data.clone(), chunk_count).unwrap();
+        let encoder = Encoder::<Scalar>::new(original_data.clone(), chunk_count).unwrap();
         println!("Chunk size: {}", encoder.chunk_size());
 
         let mut coded_packets = Vec::with_capacity(chunk_count);
@@ -47,7 +44,7 @@ mod tests {
 
         println!("Encoding time: {:?}", now.elapsed());
 
-        let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
+        let mut decoder = Decoder::<Scalar>::new(encoder.chunk_size(), chunk_count).unwrap();
 
         let now = Instant::now();
         let decoded = loop {
@@ -70,7 +67,7 @@ mod tests {
         let data = rand::rng().random_iter().take(1024 * 512).collect::<Vec<_>>();
         let chunk_count = 10;
 
-        let chunks = Encoder::prepare(&data, chunk_count).unwrap();
+        let chunks = Encoder::<Scalar>::prepare(&data, chunk_count).unwrap();
         let start = Instant::now();
         let committer = PedersenCommitter::new(seed, chunks[0].symbols().len());
         println!("Committer creation time: {:?}", start.elapsed());
@@ -80,7 +77,7 @@ mod tests {
         println!("Commitment time: {:?}", start.elapsed());
 
         let encoder = Encoder::from_chunks(chunks);
-        let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
+        let mut decoder = Decoder::<Scalar>::new(encoder.chunk_size(), chunk_count).unwrap();
 
         let mut coded_packets =
             (0..chunk_count).map(|_| encoder.encode(rand::rng()).unwrap()).collect::<Vec<_>>();
@@ -114,10 +111,10 @@ mod tests {
         let original_data = b"A";
         let chunk_count = 1;
 
-        let encoder = Encoder::new(original_data, chunk_count).unwrap();
+        let encoder = Encoder::<Scalar>::new(original_data, chunk_count).unwrap();
         let packet = encoder.encode_with_vector(&[Scalar::ONE]).unwrap();
 
-        let mut decoder = Decoder::new(encoder.chunk_size(), chunk_count).unwrap();
+        let mut decoder = Decoder::<Scalar>::new(encoder.chunk_size(), chunk_count).unwrap();
         let decoded = decoder.decode(packet).unwrap();
 
         assert!(decoded.is_some());

@@ -1,10 +1,14 @@
 //! Module that implements the RLNC decoding algorithm.
 
-use crate::{common::RLNCError, matrix::Matrix, primitives::packet::RLNCPacket};
+use crate::{
+    common::RLNCError,
+    matrix::Matrix,
+    primitives::{field::Field, packet::RLNCPacket},
+};
 
 /// RLNC Decoder.
 #[derive(Debug)]
-pub struct Decoder {
+pub struct Decoder<F: Field> {
     /// The size of each original chunk in bytes.
     chunk_size: usize,
     /// The number of coded packets required to decode the original data, also known as the
@@ -12,10 +16,10 @@ pub struct Decoder {
     chunk_count: usize,
 
     /// The RREF matrix of received coded packets.
-    matrix: Matrix,
+    matrix: Matrix<F>,
 }
 
-impl Decoder {
+impl<F: Field> Decoder<F> {
     /// Creates a new decoder for the given chunk size and chunk count (generation size).
     pub fn new(chunk_size: usize, chunk_count: usize) -> Result<Self, RLNCError> {
         if chunk_size == 0 {
@@ -31,7 +35,7 @@ impl Decoder {
 
     /// Decodes a coded packet. If the decoder has enough linearly independent packets, it will
     /// return the original data.
-    pub fn decode(&mut self, packet: RLNCPacket) -> Result<Option<Vec<u8>>, RLNCError> {
+    pub fn decode(&mut self, packet: RLNCPacket<F>) -> Result<Option<Vec<u8>>, RLNCError> {
         if packet.coding_vector.len() != self.chunk_count {
             return Err(RLNCError::InvalidCodingVectorLength(
                 packet.coding_vector.len(),

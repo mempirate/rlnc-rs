@@ -21,6 +21,3 @@ pub enum RLNCError {
 /// The boundary marker is a special byte that is used to separate the encoded data from the
 /// padding.
 pub(crate) const BOUNDARY_MARKER: u8 = 0x81;
-
-/// The number of bytes that can be safely packed into a scalar.
-pub(crate) const SAFE_BYTES_PER_SCALAR: usize = 31;
