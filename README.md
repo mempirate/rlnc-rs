@@ -1,6 +1,6 @@
 # `zc-rlnc`
-![Crates.io](https://img.shields.io/crates/v/zc-rlnc)
-![Docs.rs](https://img.shields.io/docsrs/zc-rlnc)
+[![](https://img.shields.io/crates/v/zc-rlnc)](https://crates.io/crates/zc-rlnc)
+[![](https://img.shields.io/docsrs/zc-rlnc)](https://docs.rs/zc-rlnc)
 
 RLNC (Random Linear Network Coding) is an erasure coding scheme that allows for the reconstruction of original data from any threshold of coded packets as they arrive over the network.
 Erasure coding can also be used to more efficiently transfer larger messages over multi-hop broadcast networks, because it allows for more efficient use of bandwidth. RLNC is especially suited for this use case because it assumes no specific network topology, and can be used in permissionless networks with high churn. 
