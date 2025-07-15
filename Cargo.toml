@@ -3,6 +3,11 @@ name = "zc-rlnc"
 version = "0.0.1"
 edition = "2024"
 exclude = [".github/", ".claude/", "docs/"]
+description = "A high-performance implementation of Random Linear Network Coding (RLNC) in Rust."
+license = "Apache-2.0"
+authors = ["mempirate"]
+repository = "https://github.com/mempirate/zc-rlnc"
+keywords = ["rlnc", "random", "linear", "network", "coding", "networking"]
 resolver = "2"
 
 [dependencies]
