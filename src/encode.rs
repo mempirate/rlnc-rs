@@ -2,19 +2,16 @@
 use rand::Rng;
 
 use crate::{
-    common::{BOUNDARY_MARKER, RLNCError},
-    primitives::{
-        Chunk,
-        field::{Field, Scalar},
-        packet::RLNCPacket,
-    },
+    common::RLNCError,
+    primitives::{Chunks, field::Field, packet::RLNCPacket},
 };
 
-/// RLNC encoder.
+/// RLNC encoder that's generic over the [`Field`] type. An ancoder should be instantiated
+/// per piece of data the caller wants to encode, then used to generate the encoded chunks.
 #[derive(Debug)]
 pub struct Encoder<F: Field> {
     // The chunks of data to be encoded.
-    chunks: Vec<Chunk<F>>,
+    chunks: Chunks<F>,
     // The number of chunks to split the data into (also known as the generation size).
     chunk_count: usize,
     // The size of each chunk in bytes.
@@ -23,43 +20,18 @@ pub struct Encoder<F: Field> {
 
 impl<F: Field> Encoder<F> {
     /// Creates a new encoder for the given data and chunk count.
-    ///
-    /// # Arguments
-    ///
-    /// - `data` - The data to be encoded.
-    /// - `chunk_count` - The number of chunks to split the data into (also known as the generation
-    ///   size).
     pub fn new(data: impl AsRef<[u8]>, chunk_count: usize) -> Result<Self, RLNCError> {
-        if data.as_ref().is_empty() {
-            return Err(RLNCError::EmptyData);
-        }
-
-        if chunk_count == 0 {
-            return Err(RLNCError::ZeroChunkCount);
-        }
-
-        let mut data = Vec::from(data.as_ref());
-        data.push(BOUNDARY_MARKER);
-
-        // Calculate chunk size to accommodate original data + boundary marker
-        let chunk_size = data.len().div_ceil(chunk_count);
-
-        // Round up chunk size to nearest multiple of `F::SAFE_CAPACITY` for scalar packing
-        let chunk_size = chunk_size.div_ceil(F::SAFE_CAPACITY) * F::SAFE_CAPACITY;
-        let padded_len = chunk_size * chunk_count;
-
-        // Pad the rest with zeros if needed
-        data.resize(padded_len, 0);
-
-        let chunks = data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect();
+        let chunks = Self::prepare(data, chunk_count)?;
+        let chunk_count = chunks.len();
+        let chunk_size = chunks.chunk_size();
 
         Ok(Self { chunks, chunk_count, chunk_size })
     }
 
     /// Creates a new encoder from a vector of chunks.
-    pub fn from_chunks(chunks: Vec<Chunk<F>>) -> Self {
+    pub fn from_chunks(chunks: Chunks<F>) -> Self {
         let chunk_count = chunks.len();
-        let chunk_size = chunks[0].size();
+        let chunk_size = chunks.chunk_size();
 
         Self { chunks, chunk_count, chunk_size }
     }
@@ -88,7 +60,7 @@ impl<F: Field> Encoder<F> {
     fn encode_inner(&self, coding_vector: &[F]) -> Vec<F> {
         let mut result = vec![F::ZERO; self.chunk_size.div_ceil(F::SAFE_CAPACITY)];
 
-        for (chunk, &coefficient) in self.chunks.iter().zip(coding_vector) {
+        for (chunk, &coefficient) in self.chunks.inner().iter().zip(coding_vector) {
             if coefficient.is_zero_vartime() {
                 continue;
             }
@@ -113,32 +85,8 @@ impl<F: Field> Encoder<F> {
 
     /// Prepares the data for encoding by splitting it into equally sized chunks and padding with
     /// zeros. Also converts the data into symbols in the chosen finite field.
-    pub fn prepare(
-        data: impl AsRef<[u8]>,
-        chunk_count: usize,
-    ) -> Result<Vec<Chunk<Scalar>>, RLNCError> {
-        if data.as_ref().is_empty() {
-            return Err(RLNCError::EmptyData);
-        }
-
-        if chunk_count == 0 {
-            return Err(RLNCError::ZeroChunkCount);
-        }
-
-        let mut data = Vec::from(data.as_ref());
-        data.push(BOUNDARY_MARKER);
-
-        // Calculate chunk size to accommodate original data + boundary marker
-        let chunk_size = data.len().div_ceil(chunk_count);
-
-        // Round up chunk size to nearest multiple of `F::SAFE_CAPACITY` for scalar packing
-        let chunk_size = chunk_size.div_ceil(F::SAFE_CAPACITY) * F::SAFE_CAPACITY;
-        let padded_len = chunk_size * chunk_count;
-
-        // Pad the rest with zeros if needed
-        data.resize(padded_len, 0);
-
-        Ok(data.chunks_exact(chunk_size).map(Chunk::from_bytes).collect())
+    pub fn prepare(data: impl AsRef<[u8]>, chunk_count: usize) -> Result<Chunks<F>, RLNCError> {
+        Ok(Chunks::new(data.as_ref(), chunk_count)?)
     }
 
     /// Encodes the data with the given coding vector using linear combinations.
@@ -189,6 +137,7 @@ impl<F: Field> Encoder<F> {
                 // Map each (chunk, coefficient) pair to its contribution and then reduce all
                 // contributions into the final result.
                 self.chunks
+                    .inner()
                     .par_iter()
                     .zip(coding_vector)
                     .filter_map(|(chunk, &coefficient)| {

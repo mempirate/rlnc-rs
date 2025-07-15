@@ -69,11 +69,12 @@ mod tests {
 
         let chunks = Encoder::<Scalar>::prepare(&data, chunk_count).unwrap();
         let start = Instant::now();
-        let committer = PedersenCommitter::new(seed, chunks[0].symbols().len());
+        let committer = PedersenCommitter::new(seed, chunks.inner()[0].symbols().len());
         println!("Committer creation time: {:?}", start.elapsed());
 
         let start = Instant::now();
-        let commitments = chunks.iter().map(|c| committer.commit(c.symbols())).collect::<Vec<_>>();
+        let commitments =
+            chunks.inner().iter().map(|c| committer.commit(c.symbols())).collect::<Vec<_>>();
         println!("Commitment time: {:?}", start.elapsed());
 
         let encoder = Encoder::from_chunks(chunks);

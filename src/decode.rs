@@ -3,7 +3,7 @@
 use crate::{
     common::RLNCError,
     matrix::Matrix,
-    primitives::{field::Field, packet::RLNCPacket},
+    primitives::{ChunksError, field::Field, packet::RLNCPacket},
 };
 
 /// RLNC Decoder.
@@ -23,7 +23,7 @@ impl<F: Field> Decoder<F> {
     /// Creates a new decoder for the given chunk size and chunk count (generation size).
     pub fn new(chunk_size: usize, chunk_count: usize) -> Result<Self, RLNCError> {
         if chunk_size == 0 {
-            return Err(RLNCError::ZeroChunkCount);
+            return Err(ChunksError::ZeroChunkSize.into());
         }
 
         if chunk_count == 0 {

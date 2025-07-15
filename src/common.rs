@@ -1,11 +1,11 @@
 use thiserror::Error;
 
+use crate::primitives::ChunksError;
+
 #[derive(Error, Debug)]
 pub enum RLNCError {
-    #[error("Data is empty")]
-    EmptyData,
-    #[error("Chunk count must be greater than 0")]
-    ZeroChunkCount,
+    #[error(transparent)]
+    ChunksError(#[from] ChunksError),
     #[error("Required packet count must be greater than 0")]
     ZeroPacketCount,
     #[error("Chunk size mismatch: got {0}, expected {1}")]
