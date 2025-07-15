@@ -2,7 +2,7 @@
 name = "zc-rlnc"
 version = "0.0.1"
 edition = "2024"
-exclude = [".github/"]
+exclude = [".github/", ".claude/", "docs/"]
 resolver = "2"
 
 [dependencies]
