@@ -3,7 +3,6 @@
 //! This library provides a high-performance implementation of Random Linear Network Coding (RLNC)
 //! over generic fields.
 
-pub mod commit;
 mod common;
 pub mod decode;
 pub mod encode;
@@ -17,7 +16,7 @@ mod tests {
     use rand::Rng;
     use std::time::{Duration, Instant};
 
-    use crate::commit::PedersenCommitter;
+    use zc_auth::commit::PedersenCommitter;
 
     use super::{decode::Decoder, encode::Encoder, primitives::field::Scalar};
 

@@ -1,5 +1,8 @@
 # Roadmap
 
+## 0.1.0: High-Performance, Generic RLNC
+- [x] Basic RLNC coding over generic fields
+
 ## 0.1.0: High-Performance, Cryptographically-Secure RLNC
 - [x] Basic RLNC coding and decoding with BLS12-381 scalar symbols
 - [ ] Pedersen commitments for chunk authentication & integrity

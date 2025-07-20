@@ -1,0 +1,31 @@
+[package]
+name = "zc-rlnc"
+description = "A high-performance implementation of Random Linear Network Coding (RLNC) in Rust."
+documentation = "https://docs.rs/zc-rlnc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+
+[dependencies]
+rand = { workspace = true }
+thiserror = { workspace = true }
+blstrs = { workspace = true }
+group = { workspace = true }
+
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+proptest = "1.7"
+
+zc-auth = { workspace = true }
+
+[features]
+default = ["parallel"]
+# Enable parallel encoding/decoding.
+parallel = ["dep:rayon"]
+
+[lints]
+workspace = true

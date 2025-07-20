@@ -1,0 +1,24 @@
+[package]
+name = "zc-auth"
+repository = "https://chainbound.io/zerocast"
+description = "Authentication & integrity protection for ZeroCast."
+edition.workspace = true
+version.workspace = true
+exclude.workspace = true
+license.workspace = true
+
+authors.workspace = true
+keywords.workspace = true
+
+[dependencies]
+blstrs = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true, optional = true }
+
+[features]
+default = ["parallel"]
+# Enable parallel encoding/decoding.
+parallel = ["dep:rayon"]
+
+[lints]
+workspace = true

@@ -1,39 +1,28 @@
-[package]
-name = "zc-rlnc"
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.package]
+repository = "https://chainbound.io/zerocast"
 version = "0.0.1"
 edition = "2024"
 exclude = [".github/", ".claude/", "docs/"]
-description = "A high-performance implementation of Random Linear Network Coding (RLNC) in Rust."
 license = "Apache-2.0"
 authors = ["mempirate"]
-repository = "https://github.com/mempirate/zc-rlnc"
-documentation = "https://docs.rs/zc-rlnc"
 keywords = ["rlnc", "networking", "coding"]
-resolver = "2"
 
-[dependencies]
+[workspace.dependencies]
+zc-auth = { path = "crates/auth" }
+zc-rlnc = { path = "crates/rlnc" }
+
 rand = "0.9.1"
 thiserror = "2.0.12"
 blstrs = "0.7.1"
 group = "0.13"
 
-rayon = { version = "1.10.0", optional = true }
+rayon = { version = "1.10.0" }
 
-[dev-dependencies]
-proptest = "1.7"
-
-[features]
-default = ["parallel"]
-# Enable parallel encoding/decoding.
-parallel = ["dep:rayon"]
-
-[profile.maxperf]
-inherits = "release"
-lto = "fat"
-codegen-units = 1
-incremental = false
-
-[lints]
+[workspace.lints]
 rust.missing_debug_implementations = "warn"
 rust.missing_docs = "warn"
 rust.rust_2018_idioms = { level = "deny", priority = -1 }
@@ -41,7 +30,7 @@ rust.unreachable_pub = "warn"
 rust.unused_must_use = "deny"
 rustdoc.all = "warn"
 
-[lints.clippy]
+[workspace.lints.clippy]
 # These are some of clippy's nursery (i.e., experimental) lints that we like.
 # By default, nursery lints are allowed. Some of the lints below have made good
 # suggestions which we fixed. The others didn't have any findings, so we can

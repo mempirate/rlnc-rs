@@ -713,6 +713,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zc-auth"
+version = "0.0.1"
+dependencies = [
+ "blstrs",
+ "rayon",
+ "thiserror",
+]
+
+[[package]]
 name = "zc-rlnc"
 version = "0.0.1"
 dependencies = [
@@ -722,6 +731,7 @@ dependencies = [
  "rand 0.9.1",
  "rayon",
  "thiserror",
+ "zc-auth",
 ]
 
 [[package]]
