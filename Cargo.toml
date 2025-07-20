@@ -3,7 +3,7 @@ members = ["crates/*"]
 resolver = "2"
 
 [workspace.package]
-repository = "https://chainbound.io/zerocast"
+repository = "https://github.com/chainbound/zerocast"
 version = "0.0.1"
 edition = "2024"
 exclude = [".github/", ".claude/", "docs/"]
