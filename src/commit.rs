@@ -3,6 +3,7 @@ use blstrs::{G1Projective, Scalar};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 /// The domain separation tag for the Pedersen commitment scheme.
+/// Used in the hash_to_curve operation.
 const DST: &[u8] = b"RLNC_PEDERSEN_GEN";
 
 /// A committer that uses the non-hiding Pedersen commitment scheme.

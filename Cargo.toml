@@ -7,6 +7,7 @@ description = "A high-performance implementation of Random Linear Network Coding
 license = "Apache-2.0"
 authors = ["mempirate"]
 repository = "https://github.com/mempirate/zc-rlnc"
+documentation = "https://docs.rs/zc-rlnc"
 keywords = ["rlnc", "networking", "coding"]
 resolver = "2"
 
